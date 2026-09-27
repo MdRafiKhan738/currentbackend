@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 const Transaction = require('../models/Transaction');
 const Setting = require('../models/Setting');
 const PromotionPlan = require('../models/PromotionPlan');
+const Package = require('../models/Package');
+const CreditTransaction = require('../models/CreditTransaction');
 
 // SSL Commerz Configuration
 const getSslConfig = () => ({
@@ -16,15 +18,23 @@ const getSslConfig = () => ({
 
 const initPayment = async (req, res) => {
     try {
-        const { adId, totalAmount, userName, userMobile, description, promotionDetails, paymentType } = req.body;
+        const { adId, packageId, totalAmount, userName, userMobile, description, promotionDetails, paymentType } = req.body;
         const userId = req.user.id;
 
         if (!totalAmount) {
             return res.status(400).json({ success: false, message: "Amount is required" });
         }
 
-        if (paymentType !== 'verification' && !adId) {
+        if (!['verification', 'package'].includes(paymentType) && !adId) {
             return res.status(400).json({ success: false, message: "Ad ID and amount are required" });
+        }
+
+        let selectedPackage = null;
+        if (paymentType === 'package') {
+            if (!packageId) return res.status(400).json({ success: false, message: 'Package ID is required.' });
+            selectedPackage = await Package.findOne({ _id: packageId, isActive: true });
+            if (!selectedPackage) return res.status(404).json({ success: false, message: 'Package not found or inactive.' });
+            if (Number(selectedPackage.price) !== Number(totalAmount)) return res.status(400).json({ success: false, message: 'Package price mismatch.' });
         }
 
         const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -38,7 +48,7 @@ const initPayment = async (req, res) => {
             cancel_url: `${process.env.BACKEND_URL}/api/payment/cancel/${transactionId}`,
             ipn_url: `${process.env.BACKEND_URL}/api/payment/ipn`,
             shipping_method: 'Courier',
-            product_name: 'Ad Promotion',
+            product_name: paymentType === 'package' ? (selectedPackage?.name || 'Shadamon Package') : 'Ad Promotion',
             product_category: 'Service',
             product_profile: 'general',
             cus_name: userName || 'Customer',
@@ -76,7 +86,7 @@ const initPayment = async (req, res) => {
                 amount: totalAmount,
                 transactionId,
                 description,
-                promotionDetails: { ...promotionDetails, paymentType },
+                promotionDetails: { ...promotionDetails, paymentType, ...(paymentType === 'package' && selectedPackage ? { packageId: selectedPackage._id, packageName: selectedPackage.name, packageType: selectedPackage.packageType, packageCredits: Number(selectedPackage.maxProfileView || selectedPackage.total_connects || 0), packageValidDays: Number(selectedPackage.validDays || 30), returnCreditOnClose: Array.isArray(selectedPackage.checkedFeatures) && selectedPackage.checkedFeatures.some((feature) => String(feature).trim().toLowerCase().includes('close number return')) } : {}) },
                 status: 'PENDING'
             });
             await newPayment.save();
@@ -91,7 +101,7 @@ const initPayment = async (req, res) => {
                 amount: totalAmount,
                 payType: 'Online',
                 payeeName: userName,
-                item: promotionDetails?.paymentType === 'verification' || promotionDetails?.isVerifyBadge ? 'Verify Badge' : 'Ad Promotion',
+                item: paymentType === 'package' ? ((selectedPackage?.name || 'Package') + ' - ' + Number(selectedPackage?.maxProfileView || selectedPackage?.total_connects || 0) + ' Connects') : (promotionDetails?.paymentType === 'verification' || promotionDetails?.isVerifyBadge ? 'Verify Badge' : 'Ad Promotion'),
                 status: 'PENDING'
             });
             await newTransaction.save();
@@ -142,6 +152,29 @@ const successPayment = async (req, res) => {
                     payTime: new Date()
                 }
             );
+
+            // Package purchases are activated only after SSLCommerz validates the payment.
+            if (payment?.promotionDetails?.paymentType === 'package') {
+                const pd = payment.promotionDetails;
+                const pkg = await Package.findOne({ _id: pd.packageId, isActive: true });
+                if (pkg && payment.user) {
+                    const credits = Number(pd.packageCredits || pkg.maxProfileView || pkg.total_connects || 0);
+                    const validDays = Number(pd.packageValidDays || pkg.validDays || 30);
+                    const now = new Date();
+                    const userDoc = await User.findById(payment.user);
+                    if (userDoc) {
+                        const previousTill = userDoc.activePackage?.validTill && new Date(userDoc.activePackage.validTill) > now ? new Date(userDoc.activePackage.validTill) : now;
+                        const validTill = new Date(previousTill.getTime() + validDays * 86400000);
+                        const balanceBefore = Number(userDoc.connectsBalance || 0);
+                        userDoc.connectsBalance = balanceBefore + credits;
+                        userDoc.creditsPurchased = Number(userDoc.creditsPurchased || 0) + credits;
+                        userDoc.validityDate = validTill;
+                        userDoc.activePackage = { packageId: pkg._id, name: pkg.name, type: pkg.packageType, creditsRemaining: credits, totalCredits: credits, usedCredits: 0, activatedAt: now, paymentMethod: 'SSLCommerz', returnCreditOnClose: Boolean(pd.returnCreditOnClose), validTill };
+                        await userDoc.save();
+                        await CreditTransaction.create({ userId:userDoc._id, type:'PURCHASE', amount:credits, balanceBefore, balanceAfter:userDoc.connectsBalance, source:'SSLCOMMERZ_PACKAGE', packageId:pkg._id, reason:pkg.name+' package purchase' });
+                    }
+                }
+            }
 
             // Update Ad Promotion Status (if ad exists)
             if (payment && payment.ad && payment.promotionDetails) {
