@@ -1,0 +1,1 @@
+const router=require('express').Router();const{authenticateUser}=require('../middleware/auth');const c=require('../controllers/activityController');router.use(authenticateUser);router.get('/',c.getActivities);module.exports=router;
