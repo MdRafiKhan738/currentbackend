@@ -13,11 +13,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Runner check
+        run: |
+          node --version
+          npm --version
       - name: Install dependencies
         run: npm install
       - name: Validate JavaScript syntax
@@ -28,7 +27,6 @@ jobs:
           while IFS= read -r -d '' file; do
             node --check "$file"
           done
-      # Model loading is intentionally separate from MongoDB so CI can report syntax/install failures cleanly.
       - name: Load critical backend modules
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
@@ -36,7 +34,6 @@ jobs:
           NODE_ENV: test
         run: |
           node - <<'NODE'
-          const mongoose = require("mongoose");
           const models = [
             "./models/Ad",
             "./models/Category",
