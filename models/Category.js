@@ -1,0 +1,1 @@
+const mongoose=require("mongoose");const CategorySchema=new mongoose.Schema({name:{type:String,required:true},categoryNameBn:String,status:{type:Boolean,default:true},order:Number,icon:String,investmentEnabled:{type:Boolean,default:false},minInvestment:Number,maxInvestment:Number,expectedReturn:Number},{timestamps:true});module.exports=mongoose.model("Category",CategorySchema);
