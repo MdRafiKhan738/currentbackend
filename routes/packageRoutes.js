@@ -5,6 +5,8 @@ const adminGuard=[verifyToken,checkPermission("Settings & Others")];
 
 router.get("/",c.getPackages);
 router.get("/admin",...adminGuard,c.getAllPackages);
+router.get("/admin/search-user",...adminGuard,c.searchUserByMobile);
+router.get("/admin/phone-history",...adminGuard,c.getPhoneViewHistory);
 router.post("/",...adminGuard,c.createPackage);
 router.put("/:id",...adminGuard,c.updatePackage);
 router.delete("/:id",...adminGuard,c.deletePackage);
