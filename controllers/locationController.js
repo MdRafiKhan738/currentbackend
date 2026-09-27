@@ -6,10 +6,14 @@ const { fileToBase64, processImageString } = require('../utils/imageHelper');
 exports.createLocation = async (req, res) => {
     try {
         const { name, locationNameBn, status, order } = req.body;
-        const slug = name.toLowerCase().replace(/ /g, '-');
+        const normalizedName = Array.isArray(name)
+            ? String(name.find((value) => String(value || '').trim()) || '').trim()
+            : String(name || '').trim();
+        if (!normalizedName) return res.status(400).json({ success: false, message: 'Location name is required' });
+        const slug = normalizedName.toLowerCase().replace(/ /g, '-');
 
         const location = new Location({
-            name,
+            name: normalizedName,
             locationNameBn: String(locationNameBn || '').trim(),
             slug,
             order,
@@ -31,8 +35,11 @@ exports.createLocation = async (req, res) => {
 exports.updateLocation = async (req, res) => {
     try {
         const { name, locationNameBn, status, order } = req.body;
+        const normalizedName = Array.isArray(name)
+            ? String(name.find((value) => String(value || '').trim()) || '').trim()
+            : String(name || '').trim();
         const updateData = {
-            name,
+            name: normalizedName,
             status: status === 'true' || status === true,
             order
         };
