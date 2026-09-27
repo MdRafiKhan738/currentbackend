@@ -150,8 +150,9 @@ exports.updateSubCategory = async (req, res) => {
             }
         }
 
+        const normalizedName = Array.isArray(name) ? String(name.find((value) => String(value || '').trim()) || '').trim() : String(name || '').trim();
         const updateData = {
-            name,
+            name: normalizedName,
             category,
             features: featuresArray,
             buttonType,
