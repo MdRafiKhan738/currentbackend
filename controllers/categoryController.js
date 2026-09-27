@@ -6,7 +6,7 @@ const { fileToBase64, processImageString } = require('../utils/imageHelper');
 // --- Category Controllers ---
 exports.createCategory = async (req, res) => {
     try {
-        const { name, categoryNameBn, status, inputType, order } = req.body;
+        const { name, categoryNameBn, status, inputType, order, investmentEnabled, minInvestment, maxInvestment, expectedReturn } = req.body;
         const slug = name.toLowerCase().replace(/ /g, '-');
 
         const category = new Category({
@@ -20,7 +20,11 @@ exports.createCategory = async (req, res) => {
                 adminId: req.admin.id,
                 adminName: req.admin.name || 'Admin'
             },
-            icon: req.file ? req.file.path.replace(/\\/g, "/") : null
+            icon: req.file ? req.file.path.replace(/\\/g, "/") : null,
+            investmentEnabled: investmentEnabled === 'true' || investmentEnabled === true,
+            minInvestment: Number(minInvestment) || 0,
+            maxInvestment: Number(maxInvestment) || 0,
+            expectedReturn: Number(expectedReturn) || 0
         });
 
         await category.save();
@@ -32,12 +36,16 @@ exports.createCategory = async (req, res) => {
 
 exports.updateCategory = async (req, res) => {
     try {
-        const { name, categoryNameBn, status, inputType, order } = req.body;
+        const { name, categoryNameBn, status, inputType, order, investmentEnabled, minInvestment, maxInvestment, expectedReturn } = req.body;
         const updateData = {
             name,
             status: status === 'true' || status === true,
             inputType,
-            order
+            order,
+            investmentEnabled: investmentEnabled === 'true' || investmentEnabled === true,
+            minInvestment: Number(minInvestment) || 0,
+            maxInvestment: Number(maxInvestment) || 0,
+            expectedReturn: Number(expectedReturn) || 0
         };
         if (name) updateData.slug = name.toLowerCase().replace(/ /g, '-');
         if (categoryNameBn !== undefined) {
