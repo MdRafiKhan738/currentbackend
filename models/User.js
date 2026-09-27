@@ -80,6 +80,17 @@ const UserSchema = new mongoose.Schema({
         default: 'Untrusted'
     },
 
+    // Investment-platform profile fields
+    organizationName: { type: String },
+    designation: { type: String },
+    employeeCount: { type: String },
+    investmentType: { type: String },
+    investmentRole: { type: String, enum: ['investor', 'business_owner', ''] },
+    investmentAmountMin: { type: String },
+    investmentAmountMax: { type: String },
+    investmentReturn: { type: String },
+    businessProposal: { type: String },
+
     // Extended Profile Fields
     education: { type: String },
     currentJob: { type: String },
@@ -160,6 +171,24 @@ const UserSchema = new mongoose.Schema({
     profileViews: {
         type: Number,
         default: 0
+    },
+    numberShowupCount: { type: Number, default: 0 },
+    connectsBalance: { type: Number, default: 0 },
+    creditsUsed: { type: Number, default: 0 },
+    creditsRefunded: { type: Number, default: 0 },
+    creditsPurchased: { type: Number, default: 0 },
+    validityDate: { type: Date },
+    activePackage: {
+        packageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Package' },
+        name: String,
+        type: { type: String, enum: ['You', 'Both'] },
+        creditsRemaining: { type: Number, default: 0 },
+        validTill: Date,
+        totalCredits: { type: Number, default: 0 },
+        usedCredits: { type: Number, default: 0 },
+        activatedAt: Date,
+        paymentMethod: String,
+        returnCreditOnClose: { type: Boolean, default: false }
     },
     lastLogin: {
         type: Date
