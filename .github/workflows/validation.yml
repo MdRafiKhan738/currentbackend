@@ -1,0 +1,32 @@
+name: Backend Validation
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner check
+        run: |
+          node --version
+          npm --version
+      - name: Install dependencies
+        run: npm install
+      - name: JavaScript syntax check
+        shell: bash
+        run: |
+          set -e
+          find . -type f -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*" -print0 |
+          while IFS= read -r -d '' file; do node --check "$file"; done
+      - name: Load critical models
+        env:
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test
+        run: |
+          node -e "for (const f of ['./models/Ad','./models/Category','./models/User','./models/Package']) { require(f); console.log('Loaded', f) }"
