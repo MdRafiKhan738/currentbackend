@@ -178,6 +178,14 @@ exports.createAd = async (req, res) => {
             adStatus = 'review';
         }
 
+        // Investment posts always enter the existing admin review queue first.
+        // No existing approval/filtering logic is replaced.
+        if (postRole) {
+            adStatus = 'review';
+            limitReached = false;
+            pauseReason = null;
+        }
+
         const newAd = new Ad({
             user: userId, // Can be null now
             headline,
