@@ -61,6 +61,15 @@ exports.createAd = async (req, res) => {
         if (!phone) {
             return res.status(400).json({ success: false, message: 'Phone number is required' });
         }
+        if (postRole && !['investor','business_owner'].includes(postRole)) {
+            return res.status(400).json({ success: false, message: 'Invalid investment post role' });
+        }
+        if (postRole === 'business_owner' && businessStatus && !['new','running','closed'].includes(businessStatus)) {
+            return res.status(400).json({ success: false, message: 'Invalid business status' });
+        }
+        if (minInvestment !== undefined && maxInvestment !== undefined && Number(minInvestment) > Number(maxInvestment)) {
+            return res.status(400).json({ success: false, message: 'Minimum investment cannot exceed maximum investment' });
+        }
 
         // Process images
         let imagePaths = req.files ? req.files.map(file => file.path.replace(/\\/g, "/")) : [];
