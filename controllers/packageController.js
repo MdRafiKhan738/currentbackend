@@ -33,7 +33,8 @@ exports.getAllPackages = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
-\nexports.getPackages = async (req, res) => {
+
+exports.getPackages = async (req, res) => {
     try {
         const packages = await Package.find({ isActive: true }).sort({ bestValueSuggestion: -1, price: 1 });
         res.status(200).json({ success: true, data: packages });
