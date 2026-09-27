@@ -1,0 +1,10 @@
+const express=require('express');
+const router=express.Router();
+const controller=require('../controllers/connectController');
+const {authenticateUser}=require('../middleware/auth');
+router.post('/deduct',authenticateUser,controller.deductConnect);
+router.post('/reveal-phone',authenticateUser,controller.revealPhone);
+router.post('/reveal-phone/:id/close',authenticateUser,controller.closePhoneReveal);
+router.get('/logs',authenticateUser,controller.getConnectLogs);
+router.get('/credit-transactions',authenticateUser,controller.getCreditTransactions);
+module.exports=router;
