@@ -11,7 +11,7 @@ const PremierOpportunity = require('../models/PremierOpportunity');
 // @route   POST /api/user/register
 // @access  Public
 const registerUser = async (req, res) => {
-    const { name, email, password, dob, gender, mobile, storeName, actionType } = req.body;
+    const { name, email, password, dob, gender, mobile, storeName, actionType, category, subCategory } = req.body;
 
     try {
         const normalizedName = (name || '').trim() || mobile || (email ? email.split('@')[0] : 'User');
@@ -41,6 +41,14 @@ const registerUser = async (req, res) => {
         }
 
         // Create new user (password will be hashed automatically by the pre-save hook)
+        const normalizedCategory = String(category || '').trim();
+        const normalizedSubCategory = String(subCategory || '').trim();
+        const normalizedInvestmentRole = /investor/i.test(normalizedCategory)
+            ? 'investor'
+            : /business\s*owner/i.test(normalizedCategory)
+                ? 'business_owner'
+                : '';
+
         const newUser = new User({
             name: normalizedName,
             email: email || undefined,
@@ -49,7 +57,11 @@ const registerUser = async (req, res) => {
             gender: gender || undefined,
             mobile: mobile || undefined,
             storeName: normalizedName,
-            actionType: actionType || 'call'
+            actionType: actionType || 'call',
+            category: normalizedCategory || undefined,
+            investmentSubCategory: normalizedSubCategory || undefined,
+            investmentRole: normalizedInvestmentRole,
+            investmentReturnType: normalizedInvestmentRole === 'investor' ? 'expected' : normalizedInvestmentRole === 'business_owner' ? 'return' : ''
         });
 
         await newUser.save();
