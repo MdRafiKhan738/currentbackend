@@ -2,8 +2,6 @@ name: Backend Mongo Integration
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
 
 jobs:
   integration:
