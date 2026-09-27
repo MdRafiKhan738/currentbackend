@@ -31,3 +31,5 @@ jobs:
         run: |
           node -e "for (const f of ['./models/Ad','./models/Category','./models/User','./models/Package']) { require(f); console.log('Loaded', f) }"
 
+
+# validation trigger
