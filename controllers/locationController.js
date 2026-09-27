@@ -113,8 +113,9 @@ exports.createSubLocation = async (req, res) => {
 exports.updateSubLocation = async (req, res) => {
     try {
         const { name, subLocationNameBn, location, mapLink, order, status } = req.body;
+        const normalizedName = Array.isArray(name) ? String(name.find((value) => String(value || '').trim()) || '').trim() : String(name || '').trim();
         const updateData = {
-            name,
+            name: normalizedName,
             location,
             mapLink,
             order,
