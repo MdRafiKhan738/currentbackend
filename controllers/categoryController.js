@@ -139,7 +139,7 @@ exports.createSubCategory = async (req, res) => {
 
 exports.updateSubCategory = async (req, res) => {
     try {
-        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName } = req.body;
+        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
 
         let featuresArray = [];
         if (features) {
