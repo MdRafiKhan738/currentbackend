@@ -62,7 +62,8 @@ exports.createAd = async (req, res) => {
             businessStatus,
             minInvestment,
             maxInvestment,
-            expectedReturn
+            expectedReturn,
+            investmentReturnType
         } = req.body;
 
         const alternatePhone = String(req.body.altPhone || req.body.alternatePhone || '').trim();
@@ -216,6 +217,7 @@ exports.createAd = async (req, res) => {
             minInvestment: minInvestment !== undefined ? Number(minInvestment) : undefined,
             maxInvestment: maxInvestment !== undefined ? Number(maxInvestment) : undefined,
             expectedReturn: expectedReturn !== undefined ? Number(expectedReturn) : undefined,
+            investmentReturnType: ['expected','return','refund'].includes(investmentReturnType) ? investmentReturnType : (postRole === 'investor' ? 'expected' : 'return'),
             status: adStatus,
             note: pauseReason
         });
@@ -937,7 +939,7 @@ exports.getFeedAdsPublic = async (req, res) => {
         };
 
         const selectFieldsPromoted =
-            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD postRole businessStatus minInvestment maxInvestment expectedReturn';
+            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD postRole businessStatus minInvestment maxInvestment expectedReturn investmentReturnType';
         const selectFieldsFree =
             'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate postRole businessStatus minInvestment maxInvestment expectedReturn';
         const populateUserFields =
