@@ -1,0 +1,1 @@
+const Activity=require('../models/Activity');exports.getActivities=async(req,res)=>{try{const data=await Activity.find({userId:req.user.id}).sort({createdAt:-1}).limit(50);res.json({success:true,count:data.length,data});}catch(e){res.status(500).json({success:false,message:'Server Error'});}};
