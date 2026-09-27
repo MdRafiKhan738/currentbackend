@@ -28,6 +28,7 @@ jobs:
           while IFS= read -r -d '' file; do
             node --check "$file"
           done
+      # Model loading is intentionally separate from MongoDB so CI can report syntax/install failures cleanly.
       - name: Load critical backend modules
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
