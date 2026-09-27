@@ -1,15 +1,1 @@
-const express = require('express');
-const router = express.Router();
-const packageController = require('../controllers/packageController');
-const { verifyToken, checkPermission } = require('../middleware/auth');
-
-router.get('/', packageController.getPackages);
-router.post('/', verifyToken, packageController.createPackage);
-router.put('/:id', verifyToken, packageController.updatePackage);
-router.delete('/:id', verifyToken, packageController.deletePackage);
-
-// Override user connects (Admin only)
-router.post('/manual-inject', verifyToken, checkPermission('Package Manager'), packageController.manualInject);
-router.post('/manual-refund', verifyToken, checkPermission('Package Manager'), packageController.refundCredit);
-
-module.exports = router;
+const router=require("express").Router();const c=require("../controllers/packageController");router.get("/",c.getPackages);router.get("/admin",c.getAllPackages);router.post("/",c.createPackage);router.put("/:id",c.updatePackage);router.delete("/:id",c.deletePackage);module.exports=router;
