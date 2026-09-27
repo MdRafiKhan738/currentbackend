@@ -172,6 +172,17 @@ exports.refundCredit = async (req, res) => {
             item: `${user.activePackage.name || 'Package'} - ${creditAmount} Credits Refunded`,
             status: 'VALID'
         });
+
+        const Notification = require('../models/Notification');
+        await Notification.create({
+            userId: user._id,
+            title: 'Connect credit refund',
+            message: `Admin refunded ${creditAmount} connect credit(s) to your account. Reason: ${reason.trim()}. Your current connect balance is ${user.connectsBalance}.`,
+            type: 'system_alert',
+            referenceId: user._id,
+            referenceType: 'User'
+        });
+
         res.json({ success: true, data: { user, transaction } });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Unable to issue the credit refund.' });
