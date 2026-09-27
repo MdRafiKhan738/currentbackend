@@ -61,6 +61,9 @@ exports.createAd = async (req, res) => {
         if (!phone) {
             return res.status(400).json({ success: false, message: 'Phone number is required' });
         }
+        if (postRole && !req.user) {
+            return res.status(401).json({ success: false, message: 'Login is required for investment posts' });
+        }
         if (postRole && !['investor','business_owner'].includes(postRole)) {
             return res.status(400).json({ success: false, message: 'Invalid investment post role' });
         }
@@ -287,7 +290,8 @@ exports.getAllAdsAdmin = async (req, res) => {
             featureName,
             featureValue,
             subLocation,
-            actionType
+            actionType,
+            postRole
         } = req.query;
 
         let query = {};
