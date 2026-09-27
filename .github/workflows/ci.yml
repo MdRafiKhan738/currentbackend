@@ -1,0 +1,69 @@
+name: Backend CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -e
+          find . -type f -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*" -print0 |
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done
+      - name: Load critical backend modules
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test
+        run: |
+          node - <<'NODE'
+          const mongoose = require("mongoose");
+          const models = [
+            "./models/Ad",
+            "./models/Category",
+            "./models/User",
+            "./models/Package"
+          ];
+          for (const file of models) {
+            require(file);
+            console.log("Loaded:", file);
+          }
+          console.log("Backend model loading passed.");
+          NODE
+      - name: MongoDB smoke test
+        if: ${{ secrets.MONGO_URI != '' }}
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+        run: |
+          node - <<'NODE'
+          const mongoose = require("mongoose");
+          (async () => {
+            await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+            console.log("MongoDB connection successful");
+            console.log("Database:", mongoose.connection.name);
+            await mongoose.connection.db.admin().ping();
+            console.log("MongoDB ping successful");
+            await mongoose.disconnect();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
