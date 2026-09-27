@@ -1,0 +1,1 @@
+const router=require("express").Router();const c=require("../controllers/adController");router.get("/public/feed",c.feed);router.post("/",c.create);module.exports=router;
