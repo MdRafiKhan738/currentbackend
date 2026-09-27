@@ -67,7 +67,12 @@ exports.createAd = async (req, res) => {
         if (postRole && !['investor','business_owner'].includes(postRole)) {
             return res.status(400).json({ success: false, message: 'Invalid investment post role' });
         }
-        if (postRole === 'business_owner' && businessStatus && !['new','running','closed'].includes(businessStatus)) {
+        if (postRole === 'business_owner' && !['new','running','closed'].includes(businessStatus)) {
+            return res.status(400).json({ success: false, message: 'Business status is required for business owner posts' });
+        }
+        if (postRole && [minInvestment, maxInvestment, expectedReturn].some(v => v === undefined || v === null || v === '' || Number.isNaN(Number(v)) || Number(v) < 0)) {
+            return res.status(400).json({ success: false, message: 'Valid investment range and expected return are required' });
+        }
             return res.status(400).json({ success: false, message: 'Invalid business status' });
         }
         if (minInvestment !== undefined && maxInvestment !== undefined && Number(minInvestment) > Number(maxInvestment)) {
