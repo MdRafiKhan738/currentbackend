@@ -1,0 +1,1 @@
+const router=require('express').Router();const c=require('../controllers/inviteController');const{authenticateUser}=require('../middleware/auth');router.use(authenticateUser);router.post('/send',c.sendInvite);router.get('/',c.getInvites);router.patch('/:id',c.updateInvite);module.exports=router;
