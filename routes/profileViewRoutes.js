@@ -1,0 +1,1 @@
+const express=require('express');const router=express.Router();const c=require('../controllers/profileViewController');const{authenticateUser}=require('../middleware/auth');router.post('/log',authenticateUser,c.logProfileView);router.get('/',authenticateUser,c.getProfileViews);module.exports=router;
