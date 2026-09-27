@@ -133,7 +133,12 @@ exports.createAd = async (req, res) => {
             adType: 'Free',
             price,
             priceType,
-            features: features ? (typeof features === 'string' ? JSON.parse(features) : features) : {},\n            postRole, businessStatus, minInvestment: minInvestment !== undefined ? Number(minInvestment) : undefined, maxInvestment: maxInvestment !== undefined ? Number(maxInvestment) : undefined, expectedReturn: expectedReturn !== undefined ? Number(expectedReturn) : undefined,
+            features: features ? (typeof features === 'string' ? JSON.parse(features) : features) : {},
+            postRole,
+            businessStatus,
+            minInvestment: minInvestment !== undefined ? Number(minInvestment) : undefined,
+            maxInvestment: maxInvestment !== undefined ? Number(maxInvestment) : undefined,
+            expectedReturn: expectedReturn !== undefined ? Number(expectedReturn) : undefined,
             status: adStatus,
             note: pauseReason
         });
