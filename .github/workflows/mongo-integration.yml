@@ -1,0 +1,50 @@
+name: Backend Mongo Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - name: MongoDB connection
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+        run: |
+          node - <<'NODE'
+          const mongoose = require('mongoose');
+          (async () => {
+            if (!process.env.MONGO_URI) throw new Error('MONGO_URI secret is missing');
+            await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 });
+            console.log('MongoDB connection successful');
+            console.log('Database:', mongoose.connection.name);
+            await mongoose.connection.db.admin().ping();
+            console.log('MongoDB ping successful');
+            await mongoose.disconnect();
+          })().catch(err => { console.error(err); process.exit(1); });
+          NODE
+      - name: API health
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test
+          PORT: 5000
+        run: |
+          node index.js > /tmp/currentbackend.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:5000/; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/currentbackend.log
+          exit 1
