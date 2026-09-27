@@ -50,7 +50,12 @@ exports.createAd = async (req, res) => {
             price,
             priceType,
             features,
-            verificationInfo
+            verificationInfo,
+            postRole,
+            businessStatus,
+            minInvestment,
+            maxInvestment,
+            expectedReturn
         } = req.body;
 
         if (!phone) {
