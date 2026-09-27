@@ -5,6 +5,8 @@ const SubCategory = require('../models/SubCategory');
 const Location = require('../models/Location');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 // Removed unused imageHelper import
 
 const User = require('../models/User'); // Import User model
@@ -26,8 +28,13 @@ const getCurrentTimeSlot = () => {
 // @access  Public (Optional Auth)
 exports.createAd = async (req, res) => {
     try {
-        // Optional: Associate with user if logged in
+        // Investment posts may start from the investment landing page without a
+        // pre-existing session. In that case the post phone is the account key.
+        // The existing approval/limit logic below is intentionally left intact.
         let userId = null;
+        let autoAccountToken = null;
+        let autoAccountCreated = false;
+
         if (req.user) {
             const user = await User.findById(req.user.id);
             if (user) {
@@ -58,11 +65,54 @@ exports.createAd = async (req, res) => {
             expectedReturn
         } = req.body;
 
+        const alternatePhone = String(req.body.altPhone || req.body.alternatePhone || '').trim();
+
         if (!phone) {
             return res.status(400).json({ success: false, message: 'Phone number is required' });
         }
-        if (postRole && !req.user) {
-            return res.status(401).json({ success: false, message: 'Login is required for investment posts' });
+        if (postRole && !['investor','business_owner'].includes(postRole)) {
+            return res.status(400).json({ success: false, message: 'Invalid investment post role' });
+        }
+
+        // Auto-create/attach an investment account from the primary post number.
+        // Existing logged-in accounts continue to use their existing identity.
+        if (postRole && !userId) {
+            const normalizedPhone = String(phone).trim();
+            let investmentUser = await User.findOne({ mobile: normalizedPhone });
+
+            if (!investmentUser) {
+                const randomPassword = crypto.randomBytes(24).toString('hex');
+                investmentUser = new User({
+                    name: postRole === 'investor' ? 'Investor' : 'Business Owner',
+                    mobile: normalizedPhone,
+                    password: randomPassword,
+                    storeName: postRole === 'investor' ? 'Investor' : 'Business Owner',
+                    accountStatus: 'review',
+                    investmentRole: postRole,
+                    category: category || '',
+                    merchantType: 'Free',
+                    additionalMobiles: alternatePhone ? [alternatePhone] : []
+                });
+                await investmentUser.save();
+                autoAccountCreated = true;
+            } else {
+                investmentUser.investmentRole = postRole;
+                if (category) investmentUser.category = category;
+                if (alternatePhone && !investmentUser.additionalMobiles.includes(alternatePhone)) {
+                    investmentUser.additionalMobiles.push(alternatePhone);
+                }
+                await investmentUser.save();
+            }
+
+            userId = investmentUser._id;
+
+            if (process.env.JWT_SECRET) {
+                autoAccountToken = jwt.sign(
+                    { id: investmentUser._id, email: investmentUser.email, role: 'user' },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '7d' }
+                );
+            }
         }
         if (postRole && !['investor','business_owner'].includes(postRole)) {
             return res.status(400).json({ success: false, message: 'Invalid investment post role' });
@@ -262,7 +312,10 @@ exports.createAd = async (req, res) => {
             message: 'Ad posted successfully',
             data: ad,
             limitReached,
-            limit: subCategoryFreeLimit
+            limit: subCategoryFreeLimit,
+            accountCreated: autoAccountCreated,
+            token: autoAccountToken,
+            user: userId ? await User.findById(userId).select('-password') : null
         });
     } catch (err) {
         console.error("Error creating ad:", err.message);
