@@ -1,0 +1,36 @@
+name: Backend Validation
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -e
+          while IFS= read -r file; do
+            node --check "$file"
+          done < <(find . -type f -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*")
+      - name: Load critical models and routes
+        run: |
+          node - <<'NODE'
+          require('./models/Ad');
+          require('./models/Category');
+          require('./models/User');
+          require('./models/Package');
+          require('./routes/packageRoutes');
+          console.log('Critical models and package routes loaded successfully');
+          NODE
