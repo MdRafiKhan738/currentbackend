@@ -191,10 +191,14 @@ exports.refundCredit = async (req, res) => {
 
 exports.searchUserByMobile = async (req, res) => {
     try {
-        const mobile = String(req.query.mobile || '').trim();
-        if (!mobile) return res.status(400).json({ success:false, message:'Mobile number is required.' });
+        const query = String(req.query.mobile || req.query.email || req.query.query || '').trim();
+        if (!query) return res.status(400).json({ success:false, message:'Email or mobile number is required.' });
         const user = await User.findOne({
-            $or: [{ mobile }, { additionalMobiles: mobile }]
+            $or: [
+                { mobile: query },
+                { additionalMobiles: query },
+                { email: query.toLowerCase() }
+            ]
         }).select('-password').lean();
         if (!user) return res.status(404).json({ success:false, message:'User not found.' });
         res.json({ success:true, data:user });
@@ -217,6 +221,15 @@ exports.getPhoneViewHistory = async (req, res) => {
             const owner = ownerId ? await User.findById(ownerId).select('name mobile').lean() : null;
             return { ...row, postOwner:owner };
         }));
-        res.json({ success:true, data:{ userSeen:await enrich(asViewer), othersSeen:await enrich(asOwner) } });
+        const userSeen = await enrich(asViewer);
+        const othersSeen = await enrich(asOwner);
+        res.json({
+            success:true,
+            data:{
+                userSeen,
+                othersSeen,
+                totalSeen: [...userSeen, ...othersSeen].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
+            }
+        });
     } catch (err) { res.status(500).json({ success:false, message:'Unable to load phone view history.' }); }
 };
