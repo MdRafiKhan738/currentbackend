@@ -86,6 +86,8 @@ const UserSchema = new mongoose.Schema({
     employeeCount: { type: String },
     investmentType: { type: String },
     investmentRole: { type: String, enum: ['investor', 'business_owner', ''] },
+    investmentSubCategory: { type: String, default: '' },
+    investmentReturnType: { type: String, enum: ['expected', 'return', 'refund', ''], default: '' },
     investmentAmountMin: { type: String },
     investmentAmountMax: { type: String },
     investmentReturn: { type: String },
