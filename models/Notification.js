@@ -48,13 +48,15 @@ const NotificationSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['admin_notification', 'system_alert'],
+        enum: ['admin_notification', 'system_alert', 'invite', 'proposal'],
         default: 'admin_notification'
     },
     isRead: {
         type: Boolean,
         default: false
     },
+    referenceId: { type: mongoose.Schema.Types.ObjectId },
+    referenceType: { type: String },
     createdAt: {
         type: Date,
         default: Date.now
