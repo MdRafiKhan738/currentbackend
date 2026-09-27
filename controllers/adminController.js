@@ -15,6 +15,13 @@ const { fileToBase64, processImageString } = require('../utils/imageHelper');
 /**
  * Clean up user data: trim strings and handle empty unique fields
  */
+const getInvestmentRoleFromCategory = (category) => {
+    const normalized = String(category || '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+    if (normalized.includes('investor')) return 'investor';
+    if (normalized.includes('business owner')) return 'business_owner';
+    return '';
+};
+
 const cleanUserData = (data) => {
     const cleaned = { ...data };
 
@@ -272,7 +279,7 @@ const getCurrentAdmin = async (req, res) => {
 const getAllUsers = async (req, res) => {
     try {
         let query = {};
-        const { id, mobile, email, category, location, status, merchantType, dateFrom, dateTo } = req.query;
+        const { id, mobile, email, category, location, status, merchantType, investmentRole, dateFrom, dateTo } = req.query;
 
         if (id) {
             if (mongoose.Types.ObjectId.isValid(id)) {
@@ -293,6 +300,9 @@ const getAllUsers = async (req, res) => {
             } else if (merchantType === 'customer') {
                 query.merchantType = 'Free';
             }
+        }
+        if (investmentRole && investmentRole !== 'both' && investmentRole !== 'Both') {
+            query.investmentRole = investmentRole;
         }
 
         if (dateFrom || dateTo) {
@@ -345,6 +355,11 @@ const addUser = async (req, res) => {
         const userData = { ...cleanedData };
         const files = req.files;
 
+        if (userData.category) {
+            const inferredRole = getInvestmentRoleFromCategory(userData.category);
+            if (inferredRole) userData.investmentRole = inferredRole;
+        }
+
         if (userData.mobile) {
             const existingUser = await User.findOne({ mobile: userData.mobile });
             if (existingUser) {
@@ -376,6 +391,11 @@ const updateUser = async (req, res) => {
         const cleanedData = cleanUserData(req.body);
         const userData = { ...cleanedData };
         const files = req.files;
+
+        if (userData.category) {
+            const inferredRole = getInvestmentRoleFromCategory(userData.category);
+            if (inferredRole) userData.investmentRole = inferredRole;
+        }
 
         if (userData.mobile) {
             const existingUser = await User.findOne({ mobile: userData.mobile, _id: { $ne: req.params.id } });
