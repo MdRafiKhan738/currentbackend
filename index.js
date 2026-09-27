@@ -13,6 +13,12 @@ const premierOpportunityRoutes = require('./routes/premierOpportunityRoutes');
 const settingRoutes = require('./routes/settingRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const packageRoutes = require('./routes/packageRoutes');
+const connectRoutes = require('./routes/connectRoutes');
+const inviteRoutes = require('./routes/inviteRoutes');
+const proposalRoutes = require('./routes/proposalRoutes');
+const activityRoutes = require('./routes/activityRoutes');
+const profileViewRoutes = require('./routes/profileViewRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 console.log('✅ Routes imported successfully');
 console.log('User routes:', typeof userRoutes);
@@ -118,6 +124,12 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/packages', packageRoutes);
+app.use('/api/connects', connectRoutes);
+app.use('/api/invites', inviteRoutes);
+app.use('/api/proposals', proposalRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/profile-views', profileViewRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {
