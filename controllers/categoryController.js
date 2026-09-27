@@ -83,7 +83,7 @@ exports.deleteCategory = async (req, res) => {
 // --- SubCategory Controllers ---
 exports.createSubCategory = async (req, res) => {
     try {
-        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName } = req.body;
+        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
 
         const names = Array.isArray(name) ? name : [name];
         const nameBns = Array.isArray(subCategoryNameBn) ? subCategoryNameBn : [subCategoryNameBn];
@@ -115,6 +115,10 @@ exports.createSubCategory = async (req, res) => {
                 status: status === 'true' || status === true,
                 priceBoxShow: priceBoxShow === 'true' || priceBoxShow === true,
                 priceBoxName: priceBoxName,
+                minInvestment: Number(minInvestment) || 0,
+                maxInvestment: Number(maxInvestment) || 0,
+                returnType: returnType === 'refund' ? 'refund' : 'return',
+                returnProfit: Number(returnProfit) || 0,
                 tags: tags || [],
                 image: req.file ? req.file.path.replace(/\\/g, "/") : null,
                 createdBy: {
@@ -156,6 +160,10 @@ exports.updateSubCategory = async (req, res) => {
             status: status === 'true' || status === true,
             priceBoxShow: priceBoxShow === 'true' || priceBoxShow === true,
             priceBoxName: priceBoxName,
+            minInvestment: Number(minInvestment) || 0,
+            maxInvestment: Number(maxInvestment) || 0,
+            returnType: returnType === 'refund' ? 'refund' : 'return',
+            returnProfit: Number(returnProfit) || 0,
             tags: tags || []
         };
         if (subCategoryNameBn !== undefined) {
