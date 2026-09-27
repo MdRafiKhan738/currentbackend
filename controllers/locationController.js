@@ -43,7 +43,7 @@ exports.updateLocation = async (req, res) => {
             status: status === 'true' || status === true,
             order
         };
-        if (name) updateData.slug = name.toLowerCase().replace(/ /g, '-');
+        if (normalizedName) updateData.slug = normalizedName.toLowerCase().replace(/ /g, '-');
         if (locationNameBn !== undefined) {
             updateData.locationNameBn = String(locationNameBn || '').trim();
         }
