@@ -281,6 +281,7 @@ exports.getAllAdsAdmin = async (req, res) => {
         if (category) query.category = category;
         if (subCategory) query.subCategory = subCategory;
         if (subLocation) query.subLocation = subLocation;
+        if (postRole === 'investor' || postRole === 'business_owner') query.postRole = postRole;
         if (photoStatus) query.photoStatus = photoStatus;
         if (actionType) query.actionType = actionType;
         if (promoteTag) query.promoteTag = promoteTag;
@@ -735,7 +736,7 @@ exports.updateAdDetails = async (req, res) => {
 // @access  Public
 exports.getFeedAdsPublic = async (req, res) => {
     try {
-        const { promoteTag, sort, search, page = 1 } = req.query;
+        const { promoteTag, sort, search, page = 1, postRole } = req.query;
         const category = getFilterQueryValue(req.query, 'category', 'c');
         const subCategory = getFilterQueryValue(req.query, 'subCategory', 'sc');
         const location = getFilterQueryValue(req.query, 'location', 'l');
@@ -835,9 +836,9 @@ exports.getFeedAdsPublic = async (req, res) => {
         };
 
         const selectFieldsPromoted =
-            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD';
+            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD postRole businessStatus minInvestment maxInvestment expectedReturn';
         const selectFieldsFree =
-            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate';
+            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate postRole businessStatus minInvestment maxInvestment expectedReturn';
         const populateUserFields =
             'name storeName photo photoStatus storeLogo storeBanner merchantType createdAt verifiedBy mVerified sellerPageUrl followers rating ratingCount';
 
