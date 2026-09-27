@@ -1,1 +1,10 @@
-const router=require("express").Router();const c=require("../controllers/packageController");const {verifyToken}=require("../middleware/auth");router.get("/",c.getPackages);router.get("/admin",verifyToken,c.getAllPackages);router.post("/",verifyToken,c.createPackage);router.put("/:id",verifyToken,c.updatePackage);router.delete("/:id",verifyToken,c.deletePackage);module.exports=router;
+const router=require("express").Router();
+const c=require("../controllers/packageController");
+const {verifyToken,checkPermission}=require("../middleware/auth");
+const adminGuard=[verifyToken,checkPermission("Settings & Others")];
+router.get("/",c.getPackages);
+router.get("/admin",...adminGuard,c.getAllPackages);
+router.post("/",...adminGuard,c.createPackage);
+router.put("/:id",...adminGuard,c.updatePackage);
+router.delete("/:id",...adminGuard,c.deletePackage);
+module.exports=router;
