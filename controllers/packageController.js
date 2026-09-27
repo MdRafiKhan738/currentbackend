@@ -177,3 +177,35 @@ exports.refundCredit = async (req, res) => {
         res.status(500).json({ success: false, message: 'Unable to issue the credit refund.' });
     }
 };
+
+exports.searchUserByMobile = async (req, res) => {
+    try {
+        const mobile = String(req.query.mobile || '').trim();
+        if (!mobile) return res.status(400).json({ success:false, message:'Mobile number is required.' });
+        const user = await User.findOne({
+            $or: [{ mobile }, { additionalMobiles: mobile }]
+        }).select('-password').lean();
+        if (!user) return res.status(404).json({ success:false, message:'User not found.' });
+        res.json({ success:true, data:user });
+    } catch (err) { res.status(500).json({ success:false, message:'Unable to search user.' }); }
+};
+
+exports.getPhoneViewHistory = async (req, res) => {
+    try {
+        const { userId } = req.query;
+        if (!userId) return res.status(400).json({ success:false, message:'User ID is required.' });
+        const PhoneReveal = require('../models/PhoneReveal');
+        const Ad = require('../models/Ad');
+        const [asViewer, asOwner] = await Promise.all([
+            PhoneReveal.find({ viewerId:userId }).populate('profileOwnerId','name mobile').populate('adId','headline phone user').sort({createdAt:-1}).limit(200).lean(),
+            PhoneReveal.find({ profileOwnerId:userId }).populate('viewerId','name mobile').populate({path:'adId',select:'headline phone user'}).sort({createdAt:-1}).limit(200).lean()
+        ]);
+        const enrich = async (rows) => Promise.all(rows.map(async (row) => {
+            const ad = row.adId;
+            const ownerId = ad?.user || row.profileOwnerId;
+            const owner = ownerId ? await User.findById(ownerId).select('name mobile').lean() : null;
+            return { ...row, postOwner:owner };
+        }));
+        res.json({ success:true, data:{ userSeen:await enrich(asViewer), othersSeen:await enrich(asOwner) } });
+    } catch (err) { res.status(500).json({ success:false, message:'Unable to load phone view history.' }); }
+};
