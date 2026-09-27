@@ -131,6 +131,8 @@ exports.createAd = async (req, res) => {
             if (investmentUser) {
                 investmentUser.investmentRole = postRole;
                 if (category) investmentUser.category = category;
+                if (subCategory) investmentUser.investmentSubCategory = subCategory;
+                investmentUser.investmentReturnType = postRole === 'investor' ? 'expected' : 'return';
                 if (alternatePhone && !investmentUser.additionalMobiles.includes(alternatePhone)) {
                     investmentUser.additionalMobiles.push(alternatePhone);
                 }
