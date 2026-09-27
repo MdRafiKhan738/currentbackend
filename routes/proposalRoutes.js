@@ -1,0 +1,1 @@
+const router=require('express').Router();const{authenticateUser}=require('../middleware/auth');const c=require('../controllers/proposalController');router.use(authenticateUser);router.post('/',c.createProposal);router.get('/',c.getProposals);router.patch('/:id',c.updateProposal);module.exports=router;
