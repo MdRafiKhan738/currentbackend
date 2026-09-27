@@ -98,6 +98,8 @@ exports.createAd = async (req, res) => {
                     storeName: postRole === 'investor' ? 'Investor' : 'Business Owner',
                     accountStatus: 'review',
                     investmentRole: postRole,
+                    investmentSubCategory: subCategory || '',
+                    investmentReturnType: postRole === 'investor' ? 'expected' : 'return',
                     category: category || '',
                     merchantType: 'Free',
                     additionalMobiles: alternatePhone ? [alternatePhone] : []
@@ -107,6 +109,8 @@ exports.createAd = async (req, res) => {
             } else {
                 investmentUser.investmentRole = postRole;
                 if (category) investmentUser.category = category;
+                if (subCategory) investmentUser.investmentSubCategory = subCategory;
+                investmentUser.investmentReturnType = postRole === 'investor' ? 'expected' : 'return';
                 if (alternatePhone && !investmentUser.additionalMobiles.includes(alternatePhone)) {
                     investmentUser.additionalMobiles.push(alternatePhone);
                 }
