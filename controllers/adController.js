@@ -296,6 +296,7 @@ exports.getAllAdsAdmin = async (req, res) => {
         if (subCategory) query.subCategory = subCategory;
         if (subLocation) query.subLocation = subLocation;
         if (postRole === 'investor' || postRole === 'business_owner') query.postRole = postRole;
+        else query.postRole = { $in: ['investor', 'business_owner'] };
         if (photoStatus) query.photoStatus = photoStatus;
         if (actionType) query.actionType = actionType;
         if (promoteTag) query.promoteTag = promoteTag;
