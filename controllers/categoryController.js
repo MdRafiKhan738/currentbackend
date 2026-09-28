@@ -93,12 +93,6 @@ exports.createSubCategory = async (req, res) => {
             catch (e) { priceBoxFieldsArray = []; }
         }
 
-        let priceBoxFieldsArray = [];
-        if (priceBoxFields) {
-            try { priceBoxFieldsArray = typeof priceBoxFields === 'string' ? JSON.parse(priceBoxFields) : priceBoxFields; }
-            catch (e) { priceBoxFieldsArray = []; }
-        }
-
         let featuresArray = [];
         if (features) {
             try {
@@ -153,6 +147,12 @@ exports.createSubCategory = async (req, res) => {
 exports.updateSubCategory = async (req, res) => {
     try {
         const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, priceBoxFields, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
+
+        let priceBoxFieldsArray = [];
+        if (priceBoxFields) {
+            try { priceBoxFieldsArray = typeof priceBoxFields === 'string' ? JSON.parse(priceBoxFields) : priceBoxFields; }
+            catch (e) { priceBoxFieldsArray = []; }
+        }
 
         let featuresArray = [];
         if (features) {
