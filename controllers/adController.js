@@ -888,6 +888,7 @@ exports.getFeedAdsPublic = async (req, res) => {
         if (subCategory) query.subCategory = subCategory;
         if (location) query.location = location;
         if (subLocation) query.subLocation = subLocation;
+        if (postRole === 'investor' || postRole === 'business_owner') query.postRole = postRole;
         if (promoteTag && promoteTag !== 'All') {
             if (promoteTag === 'Verified') {
                 const verifiedUsers = await User.find({ mVerified: true }).select('_id');
@@ -1579,6 +1580,23 @@ exports.updateMyAd = async (req, res) => {
         if (maxInvestment !== undefined) { ad.maxInvestment = maxInvestment === '' ? undefined : Number(maxInvestment); isDetailsModified = true; }
         if (expectedReturn !== undefined) { ad.expectedReturn = expectedReturn === '' ? undefined : Number(expectedReturn); isDetailsModified = true; }
         if (investmentReturnType !== undefined) { ad.investmentReturnType = investmentReturnType; isDetailsModified = true; }
+
+        if (postRole && !dynamicPrice.enabled) {
+            ad.price = undefined;
+            ad.priceType = undefined;
+            ad.minInvestment = undefined;
+            ad.maxInvestment = undefined;
+            ad.expectedReturn = undefined;
+            ad.investmentReturnType = postRole === 'investor' ? 'expected' : 'return';
+            ad.features = {
+                ...parseBodyObject(features, ad.features || {}),
+                priceBoxEnabled: false,
+                priceBoxName: '',
+                priceBoxValues: {},
+                priceBoxFields: []
+            };
+            isDetailsModified = true;
+        }
 
         // Check free-post slot for the trusted review bypass
         let hasFreeSlot = false;
