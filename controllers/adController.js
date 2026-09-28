@@ -1256,8 +1256,8 @@ exports.getAllAdsPublic = async (req, res) => {
 
         // Fetch active ads
         let adsQuery = Ad.find(query)
-            .select('headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate')
-            .populate('user', 'name storeName photo photoStatus storeLogo storeBanner merchantType createdAt verifiedBy mVerified sellerPageUrl followers rating ratingCount')
+            .select('headline description features labels views price images location subLocation category subCategory postRole businessStatus minInvestment maxInvestment expectedReturn investmentReturnType createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate')
+            .populate('user', 'name storeName photo photoStatus storeLogo storeBanner merchantType createdAt verifiedBy mVerified sellerPageUrl followers rating ratingCount investmentRole investmentType organizationName designation employeeCount investmentAmountMin investmentAmountMax investmentReturn')
             .sort(sortQuery);
 
         if (limit) {
@@ -1269,6 +1269,17 @@ exports.getAllAdsPublic = async (req, res) => {
         // Map ads to only include the first image in the response to save bandwidth
         const optimizedAds = ads.map(ad => {
             const adObj = ad.toObject();
+            // Attach the admin-configured dynamic fields for this post's subcategory.
+            const subDoc = await SubCategory.findOne({ name: adObj.subCategory }).select('priceBoxShow priceBoxName priceBoxFields').lean();
+            if (subDoc) {
+                adObj.priceBoxShow = subDoc.priceBoxShow;
+                adObj.priceBoxName = subDoc.priceBoxName;
+                adObj.priceBoxFields = subDoc.priceBoxFields || [];
+                if (adObj.features && typeof adObj.features === 'object') {
+                    adObj.features.priceBoxFields = subDoc.priceBoxFields || [];
+                    adObj.features.priceBoxEnabled = Boolean(subDoc.priceBoxShow);
+                }
+            }
             if (adObj.images && adObj.images.length > 0) {
                 adObj.images = [adObj.images[0]]; // Only send first image for list/suggestion view
             }
@@ -1374,7 +1385,7 @@ exports.getAdsCount = async (req, res) => {
 exports.getSingleAdPublic = async (req, res) => {
     try {
         const ad = await Ad.findById(req.params.id)
-            .populate('user', 'name storeName photo photoStatus storeLogo storeBanner merchantType verifiedBy mVerified rating ratingCount');
+            .populate('user', 'name storeName photo photoStatus storeLogo storeBanner merchantType verifiedBy mVerified followers rating ratingCount investmentRole investmentType organizationName designation employeeCount investmentAmountMin investmentAmountMax investmentReturn');
 
         if (!ad) {
             return res.status(404).json({ success: false, message: 'Ad not found' });
