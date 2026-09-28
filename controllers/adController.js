@@ -1500,8 +1500,19 @@ exports.updateMyAd = async (req, res) => {
             actionType,
             price,
             priceType,
-            features
+            features,
+            postRole,
+            businessStatus,
+            minInvestment,
+            maxInvestment,
+            expectedReturn,
+            investmentReturnType
         } = req.body;
+
+        const dynamicPrice = await getDynamicPriceBoxConfig(subCategory || ad.subCategory, req.body.priceBoxValues);
+        if (dynamicPrice.missing.length) {
+            return res.status(400).json({ success: false, message: 'Please fill all required investment fields.', fields: dynamicPrice.missing.map(field => field.key) });
+        }
 
         let isDetailsModified = false;
         let isPhotosModified = false;
@@ -1531,7 +1542,16 @@ exports.updateMyAd = async (req, res) => {
         if (actionType && actionType !== ad.actionType) { ad.actionType = actionType; isDetailsModified = true; }
         if (price !== undefined && price !== ad.price) { ad.price = price; isDetailsModified = true; }
         if (priceType !== undefined && priceType !== ad.priceType) { ad.priceType = priceType; isDetailsModified = true; }
-        if (features !== undefined) { ad.features = typeof features === 'string' ? JSON.parse(features) : features; isDetailsModified = true; }
+        if (features !== undefined || req.body.priceBoxValues !== undefined) {
+            ad.features = { ...parseBodyObject(features, ad.features || {}), priceBoxValues: dynamicPrice.values, priceBoxFields: dynamicPrice.fields };
+            isDetailsModified = true;
+        }
+        if (postRole !== undefined) { ad.postRole = postRole; isDetailsModified = true; }
+        if (businessStatus !== undefined) { ad.businessStatus = businessStatus; isDetailsModified = true; }
+        if (minInvestment !== undefined) { ad.minInvestment = minInvestment === '' ? undefined : Number(minInvestment); isDetailsModified = true; }
+        if (maxInvestment !== undefined) { ad.maxInvestment = maxInvestment === '' ? undefined : Number(maxInvestment); isDetailsModified = true; }
+        if (expectedReturn !== undefined) { ad.expectedReturn = expectedReturn === '' ? undefined : Number(expectedReturn); isDetailsModified = true; }
+        if (investmentReturnType !== undefined) { ad.investmentReturnType = investmentReturnType; isDetailsModified = true; }
 
         // Check free-post slot for the trusted review bypass
         let hasFreeSlot = false;
