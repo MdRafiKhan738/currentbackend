@@ -83,10 +83,22 @@ exports.deleteCategory = async (req, res) => {
 // --- SubCategory Controllers ---
 exports.createSubCategory = async (req, res) => {
     try {
-        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
+        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, priceBoxFields, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
 
         const names = Array.isArray(name) ? name : [name];
         const nameBns = Array.isArray(subCategoryNameBn) ? subCategoryNameBn : [subCategoryNameBn];
+        let priceBoxFieldsArray = [];
+        if (priceBoxFields) {
+            try { priceBoxFieldsArray = typeof priceBoxFields === 'string' ? JSON.parse(priceBoxFields) : priceBoxFields; }
+            catch (e) { priceBoxFieldsArray = []; }
+        }
+
+        let priceBoxFieldsArray = [];
+        if (priceBoxFields) {
+            try { priceBoxFieldsArray = typeof priceBoxFields === 'string' ? JSON.parse(priceBoxFields) : priceBoxFields; }
+            catch (e) { priceBoxFieldsArray = []; }
+        }
+
         let featuresArray = [];
         if (features) {
             try {
@@ -115,6 +127,7 @@ exports.createSubCategory = async (req, res) => {
                 status: status === 'true' || status === true,
                 priceBoxShow: priceBoxShow === 'true' || priceBoxShow === true,
                 priceBoxName: priceBoxName,
+                priceBoxFields: Array.isArray(priceBoxFieldsArray) ? priceBoxFieldsArray : [],
                 minInvestment: Number(minInvestment) || 0,
                 maxInvestment: Number(maxInvestment) || 0,
                 returnType: returnType === 'refund' ? 'refund' : 'return',
@@ -139,7 +152,7 @@ exports.createSubCategory = async (req, res) => {
 
 exports.updateSubCategory = async (req, res) => {
     try {
-        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
+        const { name, subCategoryNameBn, category, features, buttonType, freePost, order, status, tags, priceBoxShow, priceBoxName, priceBoxFields, minInvestment, maxInvestment, returnType, returnProfit } = req.body;
 
         let featuresArray = [];
         if (features) {
@@ -161,6 +174,7 @@ exports.updateSubCategory = async (req, res) => {
             status: status === 'true' || status === true,
             priceBoxShow: priceBoxShow === 'true' || priceBoxShow === true,
             priceBoxName: priceBoxName,
+            priceBoxFields: Array.isArray(priceBoxFieldsArray) ? priceBoxFieldsArray : [],
             minInvestment: Number(minInvestment) || 0,
             maxInvestment: Number(maxInvestment) || 0,
             returnType: returnType === 'refund' ? 'refund' : 'return',
