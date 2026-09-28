@@ -200,7 +200,9 @@ const updateProfile = async (req, res) => {
             'name', 'mobile', 'email', 'dob', 'gender', 'storeName',
             'actionType', 'pageName', 'category', 'location',
             'education', 'aboutYourself', 'profession', 'professionalExperience', 'sellerPageUrl', 'aboutBusiness',
-            'additionalMobiles', 'contact', 'password'
+            'additionalMobiles', 'contact', 'organizationName', 'designation', 'employeeCount',
+            'investmentRole', 'investmentType', 'investmentReturnType', 'investmentAmountMin',
+            'investmentAmountMax', 'investmentReturn', 'businessProposal', 'investmentSubCategory', 'password'
         ];
 
         // 1. Handle Text Fields
