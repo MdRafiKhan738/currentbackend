@@ -151,3 +151,93 @@ exports.getCreditTransactions = async (req,res) => {
         res.json({success:true,data:transactions});
     } catch(err){res.status(500).json({success:false,message:'Unable to load credit history.'});}
 };
+
+exports.unlockPost = async (req, res) => {
+    try {
+        const { adId, actionType = 'message' } = req.body;
+        const userId = String(req.user.id);
+        if (!adId) return res.status(400).json({ success:false, message:'Post ID is required.' });
+        if (!['message','proposal'].includes(actionType)) {
+            return res.status(400).json({ success:false, message:'Invalid connection action.' });
+        }
+
+        const Ad = require('../models/Ad');
+        const ad = await Ad.findById(adId).select('user phone status');
+        if (!ad) return res.status(404).json({ success:false, message:'Post not found.' });
+        if (String(ad.user) === userId) return res.json({ success:true, unlocked:true, ownPost:true });
+
+        const existing = await PhoneReveal.findOne({
+            viewerId:userId,
+            adId,
+            status:{ $in:['PENDING','OPEN'] }
+        });
+        if (existing?.status === 'OPEN') {
+            return res.json({ success:true, unlocked:true, alreadyUnlocked:true, revealId:existing._id });
+        }
+
+        const reveal = existing || await PhoneReveal.create({
+            viewerId:userId,
+            profileOwnerId:ad.user,
+            adId,
+            status:'PENDING'
+        });
+
+        const claimed = await PhoneReveal.findOneAndUpdate(
+            { _id:reveal._id, status:'PENDING', chargingStartedAt:{ $exists:false } },
+            { $set:{ chargingStartedAt:new Date(), connectMethod:actionType } },
+            { new:true }
+        );
+        if (!claimed) {
+            const completed = await PhoneReveal.findById(reveal._id);
+            if (completed?.status === 'OPEN') {
+                return res.json({ success:true, unlocked:true, alreadyUnlocked:true, revealId:completed._id });
+            }
+            return res.status(409).json({ success:false, message:'Connection is already being processed. Please try again.' });
+        }
+
+        const chargedUser = await User.findOneAndUpdate(
+            activePackageFilter(userId, ['You','Both']),
+            { $inc:{ 'activePackage.creditsRemaining':-1, 'activePackage.usedCredits':1, connectsBalance:-1, creditsUsed:1 } },
+            { new:true }
+        );
+
+        if (!chargedUser) {
+            await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
+            return res.status(403).json({
+                success:false,
+                code:'PACKAGE_REQUIRED',
+                message:'Purchase an active package to connect with this post.'
+            });
+        }
+
+        const balanceBefore = Number(chargedUser.activePackage.creditsRemaining) + 1;
+        claimed.chargedUserId = chargedUser._id;
+        claimed.packageId = chargedUser.activePackage?.packageId;
+        claimed.connectMethod = actionType;
+        claimed.status = 'OPEN';
+        claimed.openedAt = new Date();
+        await claimed.save();
+
+        await Promise.all([
+            ConnectLog.create({ userId:chargedUser._id, actionType, amountSpent:1, targetUserId:ad.user }),
+            CreditTransaction.create({
+                userId:chargedUser._id,
+                type:'REVEAL',
+                amount:-1,
+                balanceBefore,
+                balanceAfter:chargedUser.activePackage.creditsRemaining,
+                source:'POST_CONNECTION',
+                targetUserId:ad.user,
+                postId:ad._id,
+                packageId:chargedUser.activePackage?.packageId,
+                phoneRevealId:claimed._id,
+                reason:'First connection unlocked for post'
+            })
+        ]);
+
+        res.json({ success:true, unlocked:true, balance:chargedUser.activePackage.creditsRemaining, revealId:claimed._id });
+    } catch (err) {
+        console.error('unlockPost error:', err);
+        res.status(500).json({ success:false, message:err.message });
+    }
+};
