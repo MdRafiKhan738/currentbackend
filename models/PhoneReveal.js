@@ -15,7 +15,8 @@ const PhoneRevealSchema = new mongoose.Schema({
     chargingStartedAt: Date,
     refundedAt: Date,
     createdAt: { type: Date, default: Date.now },
-    openedAt: Date
+    openedAt: Date,
+    connectMethod: { type: String, enum: ['show_number', 'message', 'proposal'], default: 'show_number' }
 });
 
 // Only one currently open/pending reveal may exist for a viewer/post pair.
