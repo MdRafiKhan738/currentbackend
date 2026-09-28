@@ -243,3 +243,72 @@ exports.getPhoneViewHistory = async (req, res) => {
         });
     } catch (err) { res.status(500).json({ success:false, message:'Unable to load phone view history.' }); }
 };
+
+
+exports.setConnectBalance = async (req, res) => {
+    try {
+        const { userId, targetConnects, reason } = req.body;
+        const target = Number(targetConnects);
+
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'User ID is required.' });
+        }
+        if (!Number.isFinite(target) || target < 0) {
+            return res.status(400).json({ success: false, message: 'Connect balance must be zero or greater.' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        const balanceBefore = Number(user.connectsBalance || 0);
+        const difference = target - balanceBefore;
+
+        user.connectsBalance = target;
+
+        // Keep the active package's remaining credit in sync with the manually
+        // corrected connect balance. Used credits are preserved.
+        if (user.activePackage) {
+            const usedCredits = Number(user.activePackage.usedCredits || 0);
+            user.activePackage.creditsRemaining = target;
+            user.activePackage.totalCredits = target + usedCredits;
+        }
+
+        await user.save();
+
+        if (difference !== 0) {
+            await CreditTransaction.create({
+                userId: user._id,
+                type: difference > 0 ? 'ADMIN_ADJUSTMENT' : 'ADMIN_ADJUSTMENT',
+                amount: difference,
+                balanceBefore,
+                balanceAfter: target,
+                source: 'ADMIN_CONNECT_BALANCE_CORRECTION',
+                packageId: user.activePackage?.packageId,
+                adminId: req.admin.id,
+                reason: reason?.trim() || 'Manual current connect balance correction'
+            });
+        }
+
+        await Transaction.create({
+            tnxId: 'BAL-' + Date.now(),
+            mode: 'Admin',
+            sellerId: user._id,
+            amount: 0,
+            payType: 'Admin',
+            payeeName: reason?.trim() || 'Connect Balance Correction',
+            item: `Current Connect set from ${balanceBefore} to ${target}`,
+            status: 'VALID'
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: `Connect balance updated to ${target}.`,
+            data: user
+        });
+    } catch (err) {
+        console.error('setConnectBalance error:', err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
