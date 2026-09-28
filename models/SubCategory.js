@@ -12,6 +12,18 @@ const subCategorySchema = new mongoose.Schema({
     image: { type: String },
     priceBoxShow: { type: Boolean, default: false },
     priceBoxName: { type: String },
+    // Admin-configured dynamic price/investment fields shown on post creation
+    // and rendered on investment post cards/details.
+    priceBoxFields: [{
+        key: { type: String, required: true, trim: true },
+        label: { type: String, required: true, trim: true },
+        labelBn: { type: String, trim: true, default: '' },
+        placeholder: { type: String, trim: true, default: '' },
+        placeholderBn: { type: String, trim: true, default: '' },
+        inputType: { type: String, enum: ['text', 'number'], default: 'number' },
+        required: { type: Boolean, default: false },
+        order: { type: Number, default: 0 }
+    }],
     minInvestment: { type: Number, min: 0, default: 0 },
     maxInvestment: { type: Number, min: 0, default: 0 },
     returnType: { type: String, enum: ['return', 'refund'], default: 'return' },
