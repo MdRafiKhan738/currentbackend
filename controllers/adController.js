@@ -1475,6 +1475,21 @@ exports.getSingleAdPublic = async (req, res) => {
         const updatedAd = await Ad.findByIdAndUpdate(req.params.id, update, { new: true })
             .populate('user', 'name storeName photo photoStatus storeLogo storeBanner merchantType verifiedBy mVerified followers rating ratingCount');
 
+        const singlePriceConfig = ad.subCategory
+            ? await SubCategory.findOne({ name: ad.subCategory }).select('priceBoxShow priceBoxName priceBoxFields').lean()
+            : null;
+        if (singlePriceConfig) {
+            updatedAd.features = {
+                ...(updatedAd.features || {}),
+                priceBoxEnabled: Boolean(singlePriceConfig.priceBoxShow && (singlePriceConfig.priceBoxFields || []).length),
+                priceBoxName: singlePriceConfig.priceBoxShow ? (singlePriceConfig.priceBoxName || '') : '',
+                priceBoxFields: singlePriceConfig.priceBoxShow ? (singlePriceConfig.priceBoxFields || []) : []
+            };
+            updatedAd.priceBoxShow = Boolean(singlePriceConfig.priceBoxShow);
+            updatedAd.priceBoxName = singlePriceConfig.priceBoxName || '';
+            updatedAd.priceBoxFields = singlePriceConfig.priceBoxShow ? (singlePriceConfig.priceBoxFields || []) : [];
+        }
+
         res.json({
             success: true,
             data: updatedAd
