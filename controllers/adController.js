@@ -1252,7 +1252,7 @@ exports.getFeedAdsPublic = async (req, res) => {
 // @access  Public
 exports.getAllAdsPublic = async (req, res) => {
     try {
-        const { promoteTag, sort, search, limit } = req.query;
+        const { promoteTag, sort, search, limit, postRole } = req.query;
         const category = getFilterQueryValue(req.query, 'category', 'c');
         const subCategory = getFilterQueryValue(req.query, 'subCategory', 'sc');
         const location = getFilterQueryValue(req.query, 'location', 'l');
@@ -1265,6 +1265,8 @@ exports.getAllAdsPublic = async (req, res) => {
         if (subCategory) query.subCategory = subCategory;
         if (location) query.location = location;
         if (subLocation) query.subLocation = subLocation;
+        if (postRole === 'investor' || postRole === 'business_owner') query.postRole = postRole;
+        else query.postRole = { $in: ['investor', 'business_owner'] };
         if (promoteTag && promoteTag !== 'All') {
             if (promoteTag === 'Verified') {
                 const verifiedUsers = await User.find({ mVerified: true }).select('_id');
