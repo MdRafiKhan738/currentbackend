@@ -23,6 +23,22 @@ const getCurrentTimeSlot = () => {
     return 3;
 };
 
+const parseBodyObject = (value, fallback = {}) => {
+    if (!value) return fallback;
+    try { return typeof value === 'string' ? JSON.parse(value) : value; }
+    catch { return fallback; }
+};
+
+const getDynamicPriceBoxConfig = async (subCategory, rawValues) => {
+    const values = parseBodyObject(rawValues, {});
+    const subDoc = subCategory
+        ? await SubCategory.findOne({ name: subCategory }).select('priceBoxFields priceBoxShow priceBoxName').lean()
+        : null;
+    const fields = Array.isArray(subDoc?.priceBoxFields) ? subDoc.priceBoxFields : [];
+    const missing = fields.filter(field => field.required && (values[field.key] === undefined || String(values[field.key]).trim() === ''));
+    return { subDoc, fields, values, missing };
+};
+
 // @route   POST api/ads
 // @desc    Create a new ad
 // @access  Public (Optional Auth)
@@ -66,6 +82,14 @@ exports.createAd = async (req, res) => {
             investmentReturnType
         } = req.body;
 
+        const dynamicPrice = await getDynamicPriceBoxConfig(subCategory, req.body.priceBoxValues);
+        if (dynamicPrice.missing.length) {
+            return res.status(400).json({ success: false, message: 'Please fill all required investment fields.', fields: dynamicPrice.missing.map(field => field.key) });
+        }
+        const effectiveMinInvestment = minInvestment !== undefined && minInvestment !== '' ? minInvestment : dynamicPrice.values.minInvestment;
+        const effectiveMaxInvestment = maxInvestment !== undefined && maxInvestment !== '' ? maxInvestment : dynamicPrice.values.maxInvestment;
+        const effectiveExpectedReturn = expectedReturn !== undefined && expectedReturn !== '' ? expectedReturn : dynamicPrice.values.expectedReturn;
+
         const alternatePhone = String(req.body.altPhone || req.body.alternatePhone || '').trim();
 
         if (!phone) {
@@ -77,10 +101,10 @@ exports.createAd = async (req, res) => {
         if (postRole === 'business_owner' && !['new','running','closed'].includes(businessStatus)) {
             return res.status(400).json({ success: false, message: 'Business status is required for business owner posts' });
         }
-        if (postRole && [minInvestment, maxInvestment, expectedReturn].some(v => v === undefined || v === null || v === '' || Number.isNaN(Number(v)) || Number(v) < 0)) {
+        if (postRole && dynamicPrice.fields.length === 0 && [effectiveMinInvestment, effectiveMaxInvestment, effectiveExpectedReturn].some(v => v === undefined || v === null || v === '' || Number.isNaN(Number(v)) || Number(v) < 0)) {
             return res.status(400).json({ success: false, message: 'Valid investment range and expected return are required' });
         }
-        if (minInvestment !== undefined && maxInvestment !== undefined && Number(minInvestment) > Number(maxInvestment)) {
+        if (effectiveMinInvestment !== undefined && effectiveMaxInvestment !== undefined && effectiveMinInvestment !== '' && effectiveMaxInvestment !== '' && Number(effectiveMinInvestment) > Number(effectiveMaxInvestment)) {
             return res.status(400).json({ success: false, message: 'Minimum investment cannot exceed maximum investment' });
         }
 
@@ -211,12 +235,12 @@ exports.createAd = async (req, res) => {
             adType: 'Free',
             price,
             priceType,
-            features: features ? (typeof features === 'string' ? JSON.parse(features) : features) : {},
+            features: { ...parseBodyObject(features, {}), priceBoxValues: dynamicPrice.values, priceBoxFields: dynamicPrice.fields },
             postRole,
             businessStatus,
-            minInvestment: minInvestment !== undefined ? Number(minInvestment) : undefined,
-            maxInvestment: maxInvestment !== undefined ? Number(maxInvestment) : undefined,
-            expectedReturn: expectedReturn !== undefined ? Number(expectedReturn) : undefined,
+            minInvestment: effectiveMinInvestment !== undefined && effectiveMinInvestment !== '' ? Number(effectiveMinInvestment) : undefined,
+            maxInvestment: effectiveMaxInvestment !== undefined && effectiveMaxInvestment !== '' ? Number(effectiveMaxInvestment) : undefined,
+            expectedReturn: effectiveExpectedReturn !== undefined && effectiveExpectedReturn !== '' ? Number(effectiveExpectedReturn) : undefined,
             investmentReturnType: ['expected','return','refund'].includes(investmentReturnType) ? investmentReturnType : (postRole === 'investor' ? 'expected' : 'return'),
             status: adStatus,
             note: pauseReason
