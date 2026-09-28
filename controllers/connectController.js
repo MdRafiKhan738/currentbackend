@@ -5,6 +5,7 @@ const CreditTransaction = require('../models/CreditTransaction');
 
 const activePackageFilter = (userId, types) => ({
     _id: userId,
+    connectsBalance: { $gt: 0 },
     'activePackage.creditsRemaining': { $gt: 0 },
     'activePackage.validTill': { $gt: new Date() },
     'activePackage.type': { $in: types }
