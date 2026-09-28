@@ -30,13 +30,14 @@ const parseBodyObject = (value, fallback = {}) => {
 };
 
 const getDynamicPriceBoxConfig = async (subCategory, rawValues) => {
-    const values = parseBodyObject(rawValues, {});
     const subDoc = subCategory
         ? await SubCategory.findOne({ name: subCategory }).select('priceBoxFields priceBoxShow priceBoxName').lean()
         : null;
-    const fields = Array.isArray(subDoc?.priceBoxFields) ? subDoc.priceBoxFields : [];
+    const enabled = Boolean(subDoc?.priceBoxShow);
+    const values = enabled ? parseBodyObject(rawValues, {}) : {};
+    const fields = enabled && Array.isArray(subDoc?.priceBoxFields) ? subDoc.priceBoxFields : [];
     const missing = fields.filter(field => field.required && (values[field.key] === undefined || String(values[field.key]).trim() === ''));
-    return { subDoc, fields, values, missing };
+    return { subDoc, enabled, fields, values, missing };
 };
 
 // @route   POST api/ads
@@ -101,8 +102,8 @@ exports.createAd = async (req, res) => {
         if (postRole === 'business_owner' && !['new','running','closed'].includes(businessStatus)) {
             return res.status(400).json({ success: false, message: 'Business status is required for business owner posts' });
         }
-        if (postRole && dynamicPrice.fields.length === 0 && [effectiveMinInvestment, effectiveMaxInvestment, effectiveExpectedReturn].some(v => v === undefined || v === null || v === '' || Number.isNaN(Number(v)) || Number(v) < 0)) {
-            return res.status(400).json({ success: false, message: 'Valid investment range and expected return are required' });
+        if (postRole && dynamicPrice.enabled && dynamicPrice.fields.length === 0) {
+            return res.status(400).json({ success: false, message: 'This subcategory has PriceBox enabled but no fields configured.' });
         }
         if (effectiveMinInvestment !== undefined && effectiveMaxInvestment !== undefined && effectiveMinInvestment !== '' && effectiveMaxInvestment !== '' && Number(effectiveMinInvestment) > Number(effectiveMaxInvestment)) {
             return res.status(400).json({ success: false, message: 'Minimum investment cannot exceed maximum investment' });
@@ -233,9 +234,17 @@ exports.createAd = async (req, res) => {
             actionType,
             images: imagePaths,
             adType: 'Free',
-            price,
-            priceType,
-            features: { ...parseBodyObject(features, {}), priceBoxValues: dynamicPrice.values, priceBoxFields: dynamicPrice.fields },
+            price: postRole ? undefined : price,
+            priceType: postRole ? undefined : priceType,
+            features: {
+                ...parseBodyObject(features, {}),
+                ...(postRole ? {
+                    priceBoxEnabled: dynamicPrice.enabled && dynamicPrice.fields.length > 0,
+                    priceBoxName: dynamicPrice.enabled ? (dynamicPrice.subDoc?.priceBoxName || '') : '',
+                    priceBoxValues: dynamicPrice.values,
+                    priceBoxFields: dynamicPrice.fields
+                } : {})
+            },
             postRole,
             businessStatus,
             minInvestment: effectiveMinInvestment !== undefined && effectiveMinInvestment !== '' ? Number(effectiveMinInvestment) : undefined,
@@ -1101,9 +1110,26 @@ exports.getFeedAdsPublic = async (req, res) => {
         }
 
         const allAds = [...promotedAds, ...freeAds];
+        const feedSubCategoryNames = [...new Set(allAds.map(ad => ad.subCategory).filter(Boolean))];
+        const feedSubCategoryDocs = feedSubCategoryNames.length
+            ? await SubCategory.find({ name: { $in: feedSubCategoryNames } }).select('name priceBoxShow priceBoxName priceBoxFields').lean()
+            : [];
+        const feedPriceConfig = new Map(feedSubCategoryDocs.map(doc => [doc.name, doc]));
 
         const optimizedAds = allAds.map(ad => {
             const adObj = ad.toObject();
+            const feedConfig = feedPriceConfig.get(adObj.subCategory);
+            if (feedConfig) {
+                adObj.priceBoxShow = Boolean(feedConfig.priceBoxShow);
+                adObj.priceBoxName = feedConfig.priceBoxName || '';
+                adObj.priceBoxFields = feedConfig.priceBoxShow ? (feedConfig.priceBoxFields || []) : [];
+                adObj.features = {
+                    ...(adObj.features || {}),
+                    priceBoxEnabled: Boolean(feedConfig.priceBoxShow && (feedConfig.priceBoxFields || []).length),
+                    priceBoxName: feedConfig.priceBoxShow ? (feedConfig.priceBoxName || '') : '',
+                    priceBoxFields: feedConfig.priceBoxShow ? (feedConfig.priceBoxFields || []) : []
+                };
+            }
             // If an item is a "Promoted" ad but the promotion already ended, treat it as a Free post
             // in the feed response. (DB cleanup runs asynchronously and might not have updated it yet.)
             if (adObj.adType === 'Promoted' && adObj.promoteEndDate && new Date(adObj.promoteEndDate) < now) {
@@ -1232,14 +1258,7 @@ exports.getAllAdsPublic = async (req, res) => {
         const subLocation = getFilterQueryValue(req.query, 'subLocation', 'sl');
         const now = new Date();
 
-        let query = {
-            status: 'active',
-            $or: [
-                { adType: 'Promoted', promoteEndDate: { $gte: now } },
-                { adType: 'Processing' },
-                { showTill: { $gte: now } }
-            ]
-        };
+        let query = { status: 'active' };
 
         if (category) query.category = category;
         if (subCategory) query.subCategory = subCategory;
@@ -1290,19 +1309,27 @@ exports.getAllAdsPublic = async (req, res) => {
 
         const ads = await adsQuery;
 
-        // Map ads to only include the first image in the response to save bandwidth
+        // Map ads to only include the first image in the response and attach
+        // the current admin price-box configuration for the post's subcategory.
+        const publicSubCategoryNames = [...new Set(ads.map(ad => ad.subCategory).filter(Boolean))];
+        const publicSubCategoryDocs = publicSubCategoryNames.length
+            ? await SubCategory.find({ name: { $in: publicSubCategoryNames } }).select('name priceBoxShow priceBoxName priceBoxFields').lean()
+            : [];
+        const publicPriceConfig = new Map(publicSubCategoryDocs.map(doc => [doc.name, doc]));
+
         const optimizedAds = ads.map(ad => {
             const adObj = ad.toObject();
-            // Attach the admin-configured dynamic fields for this post's subcategory.
-            const subDoc = await SubCategory.findOne({ name: adObj.subCategory }).select('priceBoxShow priceBoxName priceBoxFields').lean();
-            if (subDoc) {
-                adObj.priceBoxShow = subDoc.priceBoxShow;
-                adObj.priceBoxName = subDoc.priceBoxName;
-                adObj.priceBoxFields = subDoc.priceBoxFields || [];
-                if (adObj.features && typeof adObj.features === 'object') {
-                    adObj.features.priceBoxFields = subDoc.priceBoxFields || [];
-                    adObj.features.priceBoxEnabled = Boolean(subDoc.priceBoxShow);
-                }
+            const priceConfig = publicPriceConfig.get(adObj.subCategory);
+            if (priceConfig) {
+                adObj.priceBoxShow = Boolean(priceConfig.priceBoxShow);
+                adObj.priceBoxName = priceConfig.priceBoxName || '';
+                adObj.priceBoxFields = priceConfig.priceBoxShow ? (priceConfig.priceBoxFields || []) : [];
+                adObj.features = {
+                    ...(adObj.features || {}),
+                    priceBoxEnabled: Boolean(priceConfig.priceBoxShow && (priceConfig.priceBoxFields || []).length),
+                    priceBoxName: priceConfig.priceBoxShow ? (priceConfig.priceBoxName || '') : '',
+                    priceBoxFields: priceConfig.priceBoxShow ? (priceConfig.priceBoxFields || []) : []
+                };
             }
             if (adObj.images && adObj.images.length > 0) {
                 adObj.images = [adObj.images[0]]; // Only send first image for list/suggestion view
