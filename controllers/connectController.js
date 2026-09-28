@@ -73,13 +73,6 @@ exports.revealPhone = async (req, res) => {
             { new:true }
         );
         if (!chargedUser) {
-            chargedUser = await User.findOneAndUpdate(
-                activePackageFilter(ownerId, ['Both']),
-                { $inc:{ 'activePackage.creditsRemaining':-1, 'activePackage.usedCredits':1, connectsBalance:-1, creditsUsed:1 } },
-                { new:true }
-            );
-        }
-        if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
             return res.status(403).json({ success:false, code:'PACKAGE_REQUIRED', message:'Purchase an active package to view this number.' });
         }
