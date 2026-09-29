@@ -25,6 +25,30 @@ exports.createPackage = async (req, res) => {
 };
 
 
+
+exports.getMyPackage = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select('activePackage connectsBalance creditsUsed validityDate');
+        if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+        const activePackage = user.activePackage?.validTill && new Date(user.activePackage.validTill) > new Date()
+            ? user.activePackage
+            : (user.activePackage || null);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                activePackage,
+                connectsBalance: Number(user.connectsBalance || 0),
+                creditsUsed: Number(user.creditsUsed || 0),
+                validityDate: user.validityDate || activePackage?.validTill || null
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Unable to load the active package.' });
+    }
+};
+
 exports.getAllPackages = async (req, res) => {
     try {
         const packages = await Package.find({}).sort({ createdAt: -1 });
