@@ -73,99 +73,149 @@ exports.deletePackage = async (req, res) => {
 exports.manualInject = async (req, res) => {
     try {
         const { userId, connects, note, validDays, packageId, packageType, packageName } = req.body;
-        const adminId = req.admin.id; // from admin auth middleware
+        const adminId = req.admin.id;
 
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
         const creditAmount = Number(connects);
         if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
-            return res.status(400).json({ success: false, message: 'Credit amount must be greater than zero.' });
+            return res.status(400).json({ success: false, message: "Credit amount must be greater than zero." });
         }
+
+        const selectedPackage = packageId ? await Package.findById(packageId) : null;
+        if (packageId && !selectedPackage) {
+            return res.status(404).json({ success: false, message: "Selected package not found." });
+        }
+
         const balanceBefore = Number(user.connectsBalance || 0);
-        // Add connects
         user.connectsBalance = balanceBefore + creditAmount;
         user.creditsPurchased = Number(user.creditsPurchased || 0) + creditAmount;
 
-        const selectedPackage = packageId ? await Package.findById(packageId) : null;
-        const effectiveValidDays = Number(validDays || selectedPackage?.validDays || 30);
-        if (!Number.isFinite(effectiveValidDays) || effectiveValidDays <= 0) {
-            return res.status(400).json({ success: false, message: "Validity days must be greater than zero." });
+        const previousPackage = user.activePackage?.toObject
+            ? user.activePackage.toObject()
+            : (user.activePackage || null);
+
+        const effectivePackageType =
+            selectedPackage?.packageType === "Both" ||
+            packageType === "Both" ||
+            previousPackage?.type === "Both"
+                ? "Both"
+                : "You";
+
+        const effectivePackageName =
+            selectedPackage?.name ||
+            packageName ||
+            previousPackage?.name ||
+            "Manual package";
+
+        const effectivePackageId =
+            selectedPackage?._id ||
+            packageId ||
+            previousPackage?.packageId;
+
+        const hasNewPackageSelection = Boolean(selectedPackage || packageId || packageName || packageType);
+
+        const requestedDays = Number(validDays);
+        const defaultPackageDays = Number(selectedPackage?.validDays || previousPackage?.validDays || 30);
+        const effectiveValidDays =
+            Number.isFinite(requestedDays) && requestedDays > 0
+                ? requestedDays
+                : (Number.isFinite(defaultPackageDays) && defaultPackageDays > 0 ? defaultPackageDays : 30);
+
+        // Package validity is independent from wallet credits. A manual
+        // credit injection can add 200,000+ credits while the same active
+        // package remains Platinum / Both.
+        let expiry;
+        if (validDays !== undefined && validDays !== "" && Number.isFinite(requestedDays) && requestedDays > 0) {
+            expiry = new Date(Date.now() + requestedDays * 86400000);
+        } else if (previousPackage?.validTill && new Date(previousPackage.validTill) > new Date()) {
+            expiry = new Date(previousPackage.validTill);
+        } else {
+            expiry = new Date(Date.now() + effectiveValidDays * 86400000);
         }
 
-        // Assigning a package starts its validity from the assignment time.
-        // The separate Update Valid To action can later change the expiry
-        // without changing the wallet/connect balance.
-        const now = new Date();
-        user.validityDate = new Date(
-            now.getTime() + effectiveValidDays * 24 * 60 * 60 * 1000
-        );
+        const previousRemaining = Number(previousPackage?.creditsRemaining || 0);
+        const previousTotal = Number(previousPackage?.totalCredits || 0);
+        const previousUsed = Number(previousPackage?.usedCredits || 0);
 
-        const selectedPackageType = selectedPackage?.packageType === "Both" ? "Both" : "You";
-        const selectedPackageName = selectedPackage?.name || packageName || "Manual package";
+        const shouldResetPackage =
+            Boolean(selectedPackage) &&
+            String(previousPackage?.packageId || "") !== String(selectedPackage._id);
+
+        const packageRemaining = shouldResetPackage ? 0 : previousRemaining;
+        const packageTotal = shouldResetPackage ? 0 : previousTotal;
+        const packageUsed = shouldResetPackage ? 0 : previousUsed;
+
+        const addedRemaining = packageRemaining + creditAmount;
+        const addedTotal = packageTotal + creditAmount;
+
+        user.validityDate = expiry;
         user.activePackage = {
-            packageId: packageId || undefined,
-            name: selectedPackageName,
-            type: packageType === 'Both' || selectedPackageType === 'Both' ? 'Both' : 'You',
-            creditsRemaining: Number(connects) || Number(selectedPackage?.maxProfileView || selectedPackage?.total_connects) || 0,
-            totalCredits: Number(connects) || Number(selectedPackage?.maxProfileView || selectedPackage?.total_connects) || 0,
-            usedCredits: 0,
-            activatedAt: new Date(),
-            paymentMethod: 'Manual admin assignment',
-            returnCreditOnClose: (selectedPackage?.checkedFeatures || []).some((feature) => String(feature).trim().toLowerCase() === 'close number return credit'),
-            validTill: user.validityDate
+            packageId: effectivePackageId,
+            name: effectivePackageName,
+            type: effectivePackageType,
+            creditsRemaining: addedRemaining,
+            totalCredits: addedTotal,
+            usedCredits: packageUsed,
+            activatedAt: shouldResetPackage || hasNewPackageSelection ? new Date() : (previousPackage?.activatedAt || new Date()),
+            paymentMethod: "Manual admin assignment",
+            returnCreditOnClose:
+                (selectedPackage?.checkedFeatures || previousPackage?.returnCreditOnClose)
+                    ? Boolean(
+                        (selectedPackage?.checkedFeatures || []).some(
+                            (feature) => String(feature).trim().toLowerCase() === "close number return credit"
+                        ) || previousPackage?.returnCreditOnClose
+                    )
+                    : false,
+            validTill: expiry
         };
 
         await user.save();
 
-        const socketio = req.app.get('socketio');
+        const socketio = req.app.get("socketio");
         if (socketio) {
-            socketio.to(String(user._id)).emit('credit balance updated', {
+            const payload = {
                 userId: String(user._id),
                 balance: user.connectsBalance,
                 creditsUsed: user.creditsUsed,
-                activePackage: user.activePackage
-            });
-            socketio.to(String(user._id)).emit('package updated', {
-                userId: String(user._id),
                 activePackage: user.activePackage,
-                connectsBalance: user.connectsBalance,
                 validityDate: user.validityDate
-            });
+            };
+            socketio.to(String(user._id)).emit("credit balance updated", payload);
+            socketio.to(String(user._id)).emit("package updated", payload);
         }
 
         await CreditTransaction.create({
             userId: user._id,
-            type: 'ADMIN_ADJUSTMENT',
+            type: "ADMIN_ADJUSTMENT",
             amount: creditAmount,
             balanceBefore,
             balanceAfter: user.connectsBalance,
-            source: 'ADMIN_PACKAGE_ASSIGNMENT',
-            packageId: selectedPackage?._id,
+            source: "ADMIN_PACKAGE_ASSIGNMENT",
+            packageId: selectedPackage?._id || user.activePackage?.packageId,
             adminId,
-            reason: note || 'Manual package assignment'
+            reason: note || "Manual package assignment"
         });
 
-        // Create a transaction log
-        const Transaction = require('../models/Transaction');
-        const trx = new Transaction({
-            tnxId: 'MNL-' + Date.now(),
-            mode: 'Admin',
+        await Transaction.create({
+            tnxId: "MNL-" + Date.now(),
+            mode: "Admin",
             sellerId: user._id,
-            amount: 0, // Manual injection is usually free/admin action
-            payType: 'Admin',
-            payeeName: note || 'Manual Injection',
-            item: `${selectedPackageName} (${user.activePackage.type}) - ${connects} Connects Added`,
-            status: 'VALID'
+            amount: 0,
+            payType: "Admin",
+            payeeName: note || "Manual Injection",
+            item: `${effectivePackageName} (${effectivePackageType}) - ${creditAmount} Connects Added`,
+            status: "VALID"
         });
-        await trx.save();
 
         res.status(200).json({
             success: true,
-            message: selectedPackageName + " package activated with " + creditAmount + " connects for " + effectiveValidDays + " days.",
+            message: effectivePackageName + " (" + effectivePackageType + ") updated with " + creditAmount + " connects.",
             data: user
         });
     } catch (err) {
+        console.error("manualInject error:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
