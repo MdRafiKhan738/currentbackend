@@ -5,6 +5,6 @@ exports.updateProposal=async(req,res)=>{try{const{status}=req.body;if(!['accepte
 const ownershipFilter = status === 'cancelled'
     ? { _id:req.params.id, senderId:req.user.id, status:'pending' }
     : { _id:req.params.id, receiverId:req.user.id, status:'pending' };
-const proposal=await Proposal.findOneAndUpdate(ownershipFilter,{status},{new:true}).populate('senderId','name mobile').populate('adId','headline postRole');if(!proposal)return res.status(404).json({success:false,message:'Proposal not found.'});await Notification.create({userId:proposal.senderId._id,title:'Proposal '+status,message:status==='cancelled'
+const proposal=await Proposal.findOneAndUpdate(ownershipFilter,{status},{new:true}).populate('senderId','name mobile').populate('adId','headline postRole category subCategory location subLocation priceBoxValues priceBoxFields features');if(!proposal)return res.status(404).json({success:false,message:'Proposal not found.'});await Notification.create({userId:proposal.senderId._id,title:'Proposal '+status,message:status==='cancelled'
     ? 'You cancelled your proposal for “'+(proposal.adId?.headline||'a post')+'”.'
     : 'Your proposal for “'+(proposal.adId?.headline||'a post')+'” was '+status+'.',type:'proposal',referenceId:proposal._id,referenceType:'proposal'});req.app.get('socketio')?.to(String(proposal.senderId._id)).emit('notification received');res.json({success:true,data:proposal});}catch(e){res.status(500).json({success:false,message:'Unable to update proposal.'});}};
