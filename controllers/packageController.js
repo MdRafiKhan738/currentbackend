@@ -109,6 +109,22 @@ exports.manualInject = async (req, res) => {
 
         await user.save();
 
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(user._id)).emit('credit balance updated', {
+                userId: String(user._id),
+                balance: user.connectsBalance,
+                creditsUsed: user.creditsUsed,
+                activePackage: user.activePackage
+            });
+            socketio.to(String(user._id)).emit('package updated', {
+                userId: String(user._id),
+                activePackage: user.activePackage,
+                connectsBalance: user.connectsBalance,
+                validityDate: user.validityDate
+            });
+        }
+
         await CreditTransaction.create({
             userId: user._id,
             type: 'ADMIN_ADJUSTMENT',
