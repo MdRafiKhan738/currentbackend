@@ -372,3 +372,43 @@ exports.setConnectBalance = async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
+// Update only the active package validity. Wallet/connect balance and package type
+// remain untouched so an admin can change the expiry independently.
+exports.updateManualPackageValidity = async (req, res) => {
+    try {
+        const { userId, validDays, validTill } = req.body;
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        if (!user.activePackage?.name) return res.status(400).json({ success: false, message: 'No active package is assigned.' });
+
+        let expiry;
+        if (validTill) {
+            expiry = new Date(validTill);
+        } else {
+            const days = Number(validDays);
+            if (!Number.isFinite(days) || days <= 0) {
+                return res.status(400).json({ success: false, message: 'Validity days must be greater than zero.' });
+            }
+            expiry = new Date(Date.now() + days * 86400000);
+        }
+        if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) {
+            return res.status(400).json({ success: false, message: 'Valid to must be a future date.' });
+        }
+
+        user.validityDate = expiry;
+        user.activePackage.validTill = expiry;
+        await user.save();
+
+        req.app.get('socketio')?.to(String(user._id)).emit('package updated', {
+            userId: String(user._id),
+            activePackage: user.activePackage,
+            connectsBalance: user.connectsBalance,
+            validityDate: user.validityDate
+        });
+        res.json({ success: true, data: user });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
