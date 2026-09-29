@@ -136,6 +136,10 @@ exports.revealPhone = async (req, res) => {
             return res.status(409).json({ success:false, code:'REVEAL_IN_PROGRESS', message:'Your number reveal is already being processed. Please try again.' });
         }
 
+        // Both-package accounts own the connection cost for their approved
+        // posts. If wallet credits remain, one is consumed; once the wallet
+        // reaches zero, the valid Both package still authorizes the reveal
+        // until validTill.
         const payer = await getConnectionPayer(viewerId, ownerId);
         const chargeResult = await consumeConnectionForPayer(payer);
         const chargedUser = chargeResult.user;
@@ -144,46 +148,74 @@ exports.revealPhone = async (req, res) => {
             return res.status(403).json({ success:false, code:'PACKAGE_REQUIRED', message:'Purchase an active package to view this number.' });
         }
 
-        const balanceBefore = chargeResult.charged ? Number(chargedUser.connectsBalance) + 1 : Number(chargedUser.connectsBalance);
+        const balanceBefore = chargeResult.charged
+            ? Number(chargedUser.connectsBalance) + 1
+            : Number(chargedUser.connectsBalance);
+
         if (chargeResult.charged) {
             claimedReveal.chargedUserId = chargedUser._id;
             claimedReveal.packageId = chargedUser.activePackage?.packageId;
         } else if (payer.payerType === 'owner') {
             claimedReveal.packageId = chargedUser.activePackage?.packageId;
         }
+
         claimedReveal.status = 'OPEN';
         claimedReveal.openedAt = new Date();
         await claimedReveal.save();
 
         const socketio = req.app.get('socketio');
-        if (socketio) {
-            socketio.to(String(chargedUser._id)).emit('credit balance updated', {
+        if (socketio && chargeResult.charged) {
+            const payload = {
                 userId: String(chargedUser._id),
                 balance: chargedUser.connectsBalance,
                 creditsUsed: chargedUser.creditsUsed,
                 activePackage: chargedUser.activePackage
+            };
+            socketio.to(String(chargedUser._id)).emit('credit balance updated', payload);
+            socketio.to(String(chargedUser._id)).emit('package updated', {
+                ...payload,
+                validityDate: chargedUser.validityDate
             });
         }
 
         const phoneAudit = [
             User.updateOne({ _id:ad.user }, { $inc:{ numberShowupCount:1 } })
         ];
+
         if (chargeResult.charged) {
             phoneAudit.push(
-                ConnectLog.create({ userId:chargedUser._id, actionType:'view_phone', amountSpent:1, targetUserId:ad.user }),
+                ConnectLog.create({
+                    userId:chargedUser._id,
+                    actionType:'view_phone',
+                    amountSpent:1,
+                    targetUserId:ad.user
+                }),
                 CreditTransaction.create({
-                    userId:chargedUser._id, type:'REVEAL', amount:-1,
-                    balanceBefore, balanceAfter:chargedUser.connectsBalance,
-                    source:'PHONE_REVEAL', targetUserId:ad.user, postId:ad._id,
-                    packageId:chargedUser.activePackage?.packageId, phoneRevealId:claimedReveal._id,
+                    userId:chargedUser._id,
+                    type:'REVEAL',
+                    amount:-1,
+                    balanceBefore,
+                    balanceAfter:chargedUser.connectsBalance,
+                    source:'PHONE_REVEAL',
+                    targetUserId:ad.user,
+                    postId:ad._id,
+                    packageId:chargedUser.activePackage?.packageId,
+                    phoneRevealId:claimedReveal._id,
                     reason:payer.payerType === 'owner'
                         ? 'Phone number revealed - charged to post owner Both package'
                         : 'Phone number revealed'
                 })
             );
         }
+
         await Promise.all(phoneAudit);
-        res.json({ success:true, phone:ad.phone, balance:chargedUser.connectsBalance, revealId:claimedReveal._id });
+        res.json({
+            success:true,
+            phone:ad.phone,
+            balance:chargedUser.connectsBalance,
+            revealId:claimedReveal._id,
+            payerType: payer.payerType
+        });
     } catch (err) { res.status(500).json({ success:false, message:err.message }); }
 };
 
