@@ -252,7 +252,8 @@ exports.unlockPost = async (req, res) => {
             return res.status(409).json({ success:false, message:'Connection is already being processed. Please try again.' });
         }
 
-        const chargedUser = await chargeOneConnect(userId);
+        const payer = await getConnectionPayer(userId, ad.user);
+        const chargedUser = payer.user ? await chargeOneConnect(payer.user._id) : null;
 
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
