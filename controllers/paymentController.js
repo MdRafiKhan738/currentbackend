@@ -171,6 +171,21 @@ const successPayment = async (req, res) => {
                         userDoc.validityDate = validTill;
                         userDoc.activePackage = { packageId: pkg._id, name: pkg.name, type: pkg.packageType, creditsRemaining: credits, totalCredits: credits, usedCredits: 0, activatedAt: now, paymentMethod: 'SSLCommerz', returnCreditOnClose: Boolean(pd.returnCreditOnClose), validTill };
                         await userDoc.save();
+
+                        const socketio = req.app.get('socketio');
+                        if (socketio) {
+                            const payload = {
+                                userId: String(userDoc._id),
+                                balance: Number(userDoc.connectsBalance || 0),
+                                connectsBalance: Number(userDoc.connectsBalance || 0),
+                                creditsUsed: Number(userDoc.creditsUsed || 0),
+                                activePackage: userDoc.activePackage,
+                                validityDate: userDoc.validityDate
+                            };
+                            socketio.to(String(userDoc._id)).emit('credit balance updated', payload);
+                            socketio.to(String(userDoc._id)).emit('package updated', payload);
+                        }
+
                         await CreditTransaction.create({ userId:userDoc._id, type:'PURCHASE', amount:credits, balanceBefore, balanceAfter:userDoc.connectsBalance, source:'SSLCOMMERZ_PACKAGE', packageId:pkg._id, reason:pkg.name+' package purchase' });
                     }
                 }
