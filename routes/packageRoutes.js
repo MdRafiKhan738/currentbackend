@@ -1,9 +1,10 @@
 const router=require("express").Router();
 const c=require("../controllers/packageController");
-const {verifyToken,checkPermission}=require("../middleware/auth");
+const {verifyToken,checkPermission,authenticateUser}=require("../middleware/auth");
 const adminGuard=[verifyToken,checkPermission("Settings & Others")];
 
 router.get("/",c.getPackages);
+router.get("/mine",authenticateUser,c.getMyPackage);
 router.get("/admin",...adminGuard,c.getAllPackages);
 router.get("/admin/search-user",...adminGuard,c.searchUserByMobile);
 router.get("/admin/phone-history",...adminGuard,c.getPhoneViewHistory);
