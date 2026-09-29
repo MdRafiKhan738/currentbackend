@@ -167,7 +167,9 @@ exports.manualInject = async (req, res) => {
                 String(previousPackage?.packageId || "") === String(selectedPackage._id));
 
         let expiry;
-        if (sameActivePackage && previousPackage?.validTill && new Date(previousPackage.validTill) > new Date()) {
+        if (selectedPackage) {
+            expiry = new Date(Date.now() + effectiveValidDays * 86400000);
+        } else if (sameActivePackage && previousPackage?.validTill && new Date(previousPackage.validTill) > new Date()) {
             expiry = new Date(previousPackage.validTill);
         } else {
             expiry = new Date(Date.now() + effectiveValidDays * 86400000);
