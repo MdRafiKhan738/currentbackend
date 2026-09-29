@@ -85,6 +85,10 @@ io.on('connection', (socket) => {
     socket.on('message seen', ({ adId, senderId, receiverId }) => {
         socket.to(senderId).emit('seen updated', { adId, receiverId });
     });
+
+    socket.on('disconnect', () => {
+        console.log(`Socket: disconnected ${socket.id}`);
+    });
 });
 
 // Body parser middleware
