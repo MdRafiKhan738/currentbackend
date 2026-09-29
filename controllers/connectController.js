@@ -99,6 +99,15 @@ exports.revealPhone = async (req, res) => {
         claimedReveal.openedAt = new Date();
         await claimedReveal.save();
 
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(chargedUser._id)).emit('credit balance updated', {
+                userId: String(chargedUser._id),
+                balance: chargedUser.connectsBalance,
+                creditsUsed: chargedUser.creditsUsed
+            });
+        }
+
         await Promise.all([
             ConnectLog.create({ userId:chargedUser._id, actionType:'view_phone', amountSpent:1, targetUserId:ad.user }),
             CreditTransaction.create({
@@ -214,7 +223,7 @@ exports.unlockPost = async (req, res) => {
             });
         }
 
-        const balanceBefore = Number(chargedUser.activePackage.creditsRemaining) + 1;
+        const balanceBefore = Number(chargedUser.connectsBalance) + 1;
         claimed.chargedUserId = chargedUser._id;
         claimed.packageId = chargedUser.activePackage?.packageId;
         claimed.connectMethod = actionType;
@@ -229,7 +238,7 @@ exports.unlockPost = async (req, res) => {
                 type:'REVEAL',
                 amount:-1,
                 balanceBefore,
-                balanceAfter:chargedUser.activePackage.creditsRemaining,
+                balanceAfter:chargedUser.connectsBalance,
                 source:'POST_CONNECTION',
                 targetUserId:ad.user,
                 postId:ad._id,
