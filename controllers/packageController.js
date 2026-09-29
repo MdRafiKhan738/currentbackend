@@ -336,6 +336,19 @@ exports.setConnectBalance = async (req, res) => {
             status: 'VALID'
         });
 
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            const payload = {
+                userId: String(user._id),
+                balance: user.connectsBalance,
+                creditsUsed: user.creditsUsed,
+                activePackage: user.activePackage,
+                validityDate: user.validityDate
+            };
+            socketio.to(String(user._id)).emit('credit balance updated', payload);
+            socketio.to(String(user._id)).emit('package updated', payload);
+        }
+
         return res.status(200).json({
             success: true,
             message: `Connect balance updated to ${target}.`,
