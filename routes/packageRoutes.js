@@ -11,6 +11,7 @@ router.post("/",...adminGuard,c.createPackage);
 router.put("/:id",...adminGuard,c.updatePackage);
 router.delete("/:id",...adminGuard,c.deletePackage);
 router.post("/manual-inject",...adminGuard,c.manualInject);
+router.post("/manual-update-validity",...adminGuard,c.updateManualPackageValidity);
 router.post("/set-connect-balance",...adminGuard,c.setConnectBalance);
 router.post("/manual-refund",...adminGuard,c.refundCredit);
 
