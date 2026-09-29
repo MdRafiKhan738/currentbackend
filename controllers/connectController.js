@@ -231,6 +231,15 @@ exports.unlockPost = async (req, res) => {
         claimed.openedAt = new Date();
         await claimed.save();
 
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(chargedUser._id)).emit('credit balance updated', {
+                userId: String(chargedUser._id),
+                balance: chargedUser.connectsBalance,
+                creditsUsed: chargedUser.creditsUsed
+            });
+        }
+
         await Promise.all([
             ConnectLog.create({ userId:chargedUser._id, actionType, amountSpent:1, targetUserId:ad.user }),
             CreditTransaction.create({
