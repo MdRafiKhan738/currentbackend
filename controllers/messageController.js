@@ -69,6 +69,14 @@ exports.sendMessage = async (req, res) => {
         conversation.updatedAt = Date.now();
         await conversation.save();
 
+        // Emit from the backend after the database write succeeds. This is the
+        // authoritative realtime message event; clients no longer need to race
+        // a second socket emit after the REST request.
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(receiverId)).emit('message received', savedMessage.toObject());
+        }
+
         res.status(201).json({
             success: true,
             data: savedMessage
@@ -243,6 +251,14 @@ exports.markAsSeen = async (req, res) => {
             { $set: { status: 'seen' } }
         );
 
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(otherUserId)).emit('seen updated', {
+                adId,
+                receiverId: myId
+            });
+        }
+
         res.json({ success: true, message: 'Messages marked as seen' });
     } catch (err) {
         console.error("Error marking messages as seen:", err.message);
@@ -335,6 +351,11 @@ exports.requestCallMe = async (req, res) => {
         conversation.lastMessage = savedMessage._id;
         conversation.updatedAt = Date.now();
         await conversation.save();
+
+        const socketio = req.app.get('socketio');
+        if (socketio) {
+            socketio.to(String(receiverId)).emit('message received', savedMessage.toObject());
+        }
 
         res.status(201).json({
             success: true,
