@@ -58,7 +58,8 @@ const getConnectionPayer = async (viewerId, ownerId) => {
     if (
         owner._id.toString() !== viewer._id.toString() &&
         owner.activePackage?.type === "Both" &&
-        isActivePackage(owner)
+        isActivePackage(owner) &&
+        Number(owner.connectsBalance || 0) > 0
     ) {
         return { user: owner, payerType: "owner" };
     }
