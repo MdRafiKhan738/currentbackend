@@ -13,6 +13,15 @@ const User = require('../models/User'); // Import User model
 const PromotionPlan = require('../models/PromotionPlan'); // Import PromotionPlan model
 const Setting = require('../models/Setting'); // Import Setting model
 
+const emitRealtime = (req, event, payload) => {
+    try {
+        const socketio = req.app?.get('socketio');
+        if (socketio) socketio.emit(event, payload);
+    } catch (error) {
+        console.error('Realtime emit error:', error.message);
+    }
+};
+
 const getFilterQueryValue = (query, longKey, shortKey) => query[longKey] || query[shortKey];
 
 // Returns 1 (00:00-07:59), 2 (08:00-15:59), or 3 (16:00-23:59)
@@ -557,6 +566,12 @@ exports.updateAdStatus = async (req, res) => {
         ad.userUpdated = false;
         ad.userNewPhotos = false;
         await ad.save();
+
+        emitRealtime(req, 'ad status changed', {
+            adId: String(ad._id),
+            status: ad.status,
+            ad: ad.toObject()
+        });
 
         res.json({
             success: true,
@@ -2204,6 +2219,12 @@ exports.toggleAdStatusMyAd = async (req, res) => {
         }
 
         await ad.save();
+
+        emitRealtime(req, 'ad status changed', {
+            adId: String(ad._id),
+            status: ad.status,
+            ad: ad.toObject()
+        });
 
         res.json({
             success: true,
