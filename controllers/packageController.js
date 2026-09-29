@@ -206,6 +206,7 @@ exports.manualInject = async (req, res) => {
             const payload = {
                 userId: String(user._id),
                 balance: user.connectsBalance,
+                connectsBalance: user.connectsBalance,
                 creditsUsed: user.creditsUsed,
                 activePackage: user.activePackage,
                 validityDate: user.validityDate
@@ -295,6 +296,7 @@ exports.refundCredit = async (req, res) => {
             const payload = {
                 userId: String(user._id),
                 balance: user.connectsBalance,
+                connectsBalance: user.connectsBalance,
                 creditsUsed: user.creditsUsed,
                 activePackage: user.activePackage,
                 validityDate: user.validityDate
@@ -427,6 +429,7 @@ exports.setConnectBalance = async (req, res) => {
             const payload = {
                 userId: String(user._id),
                 balance: user.connectsBalance,
+                connectsBalance: user.connectsBalance,
                 creditsUsed: user.creditsUsed,
                 activePackage: user.activePackage,
                 validityDate: user.validityDate
