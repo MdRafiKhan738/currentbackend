@@ -1,3 +1,11 @@
+const splitFeatures = (value) => {
+    const source = Array.isArray(value) ? value : [value];
+    return source
+        .flatMap((item) => String(item ?? '').split(/[,\n]/))
+        .map((item) => item.trim())
+        .filter(Boolean);
+};
+
 const Package = require('../models/Package');
 const User = require('../models/User');
 const CreditTransaction = require('../models/CreditTransaction');
@@ -15,7 +23,7 @@ exports.createPackage = async (req, res) => {
         const newPackage = new Package({ 
             name, packageType, oldPrice, price, total_connects, 
             maxProfileView: credits, total_connects: credits, validDays, bestValueSuggestion, 
-            checkedFeatures, uncheckedFeatures, isActive 
+            checkedFeatures: splitFeatures(checkedFeatures), uncheckedFeatures: splitFeatures(uncheckedFeatures), isActive 
         });
         await newPackage.save();
         res.status(201).json({ success: true, data: newPackage });
@@ -70,6 +78,8 @@ exports.getPackages = async (req, res) => {
 exports.updatePackage = async (req, res) => {
     try {
         const updates = { ...req.body };
+        if (updates.checkedFeatures !== undefined) updates.checkedFeatures = splitFeatures(updates.checkedFeatures);
+        if (updates.uncheckedFeatures !== undefined) updates.uncheckedFeatures = splitFeatures(updates.uncheckedFeatures);
         if (updates.maxProfileView !== undefined || updates.total_connects !== undefined) {
             const credits = Number(updates.maxProfileView ?? updates.total_connects) || 0;
             updates.maxProfileView = credits;
@@ -192,7 +202,7 @@ exports.manualInject = async (req, res) => {
                 (selectedPackage?.checkedFeatures || previousPackage?.returnCreditOnClose)
                     ? Boolean(
                         (selectedPackage?.checkedFeatures || []).some(
-                            (feature) => String(feature).trim().toLowerCase() === "close number return credit"
+                            (feature) => String(feature).trim().toLowerCase().includes("close number return credit")
                         ) || previousPackage?.returnCreditOnClose
                     )
                     : false,
