@@ -416,16 +416,13 @@ exports.setConnectBalance = async (req, res) => {
             : (user.activePackage || null);
 
         if (selectedPackage) {
-            const previousValidTill = previousPackage?.validTill ? new Date(previousPackage.validTill) : null;
             const samePackage = String(previousPackage?.packageId || '') === String(selectedPackage._id);
             const requestedDays = Number(validDays);
             const packageDays = Number(selectedPackage.validDays || 30);
             const effectiveDays = Number.isFinite(requestedDays) && requestedDays > 0
                 ? requestedDays
                 : (Number.isFinite(packageDays) && packageDays > 0 ? packageDays : 30);
-            const validTill = samePackage && previousValidTill && previousValidTill > new Date()
-                ? previousValidTill
-                : new Date(Date.now() + effectiveDays * 86400000);
+            const validTill = new Date(Date.now() + effectiveDays * 86400000);
             const usedCredits = samePackage ? Number(previousPackage?.usedCredits || 0) : 0;
             const packageTypeResolved = selectedPackage.packageType === 'Both'
                 ? 'Both'
