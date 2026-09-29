@@ -159,7 +159,8 @@ exports.revealPhone = async (req, res) => {
             socketio.to(String(chargedUser._id)).emit('credit balance updated', {
                 userId: String(chargedUser._id),
                 balance: chargedUser.connectsBalance,
-                creditsUsed: chargedUser.creditsUsed
+                creditsUsed: chargedUser.creditsUsed,
+                activePackage: chargedUser.activePackage
             });
         }
 
