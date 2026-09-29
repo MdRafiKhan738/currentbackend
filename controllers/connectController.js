@@ -3,13 +3,31 @@ const User = require('../models/User');
 const PhoneReveal = require('../models/PhoneReveal');
 const CreditTransaction = require('../models/CreditTransaction');
 
+// A connection is available whenever the account has at least 1 connect/credit.
+// An active package is not required when the account already has connectsBalance.
 const activePackageFilter = (userId, types) => ({
     _id: userId,
-    connectsBalance: { $gt: 0 },
-    'activePackage.creditsRemaining': { $gt: 0 },
-    'activePackage.validTill': { $gt: new Date() },
-    'activePackage.type': { $in: types }
+    connectsBalance: { $gt: 0 }
 });
+
+const chargeOneConnect = async (userId) => {
+    const user = await User.findOneAndUpdate(
+        { _id: userId, connectsBalance: { $gt: 0 } },
+        { $inc: { connectsBalance: -1, creditsUsed: 1 } },
+        { new: true }
+    );
+
+    if (!user) return null;
+
+    // Keep package counters synchronized when this balance belongs to an active package.
+    if (Number(user.activePackage?.creditsRemaining || 0) > 0) {
+        user.activePackage.creditsRemaining = Math.max(0, Number(user.activePackage.creditsRemaining) - 1);
+        user.activePackage.usedCredits = Number(user.activePackage.usedCredits || 0) + 1;
+        await user.save();
+    }
+
+    return user;
+};
 
 exports.deductConnect = async (req, res) => {
     try {
@@ -68,17 +86,13 @@ exports.revealPhone = async (req, res) => {
             return res.status(409).json({ success:false, code:'REVEAL_IN_PROGRESS', message:'Your number reveal is already being processed. Please try again.' });
         }
 
-        let chargedUser = await User.findOneAndUpdate(
-            activePackageFilter(viewerId, ['You','Both']),
-            { $inc:{ 'activePackage.creditsRemaining':-1, 'activePackage.usedCredits':1, connectsBalance:-1, creditsUsed:1 } },
-            { new:true }
-        );
+        let chargedUser = await chargeOneConnect(viewerId);
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
             return res.status(403).json({ success:false, code:'PACKAGE_REQUIRED', message:'Purchase an active package to view this number.' });
         }
 
-        const balanceBefore = Number(chargedUser.activePackage.creditsRemaining) + 1;
+        const balanceBefore = Number(chargedUser.connectsBalance) + 1;
         claimedReveal.chargedUserId = chargedUser._id;
         claimedReveal.packageId = chargedUser.activePackage?.packageId;
         claimedReveal.status = 'OPEN';
@@ -89,14 +103,14 @@ exports.revealPhone = async (req, res) => {
             ConnectLog.create({ userId:chargedUser._id, actionType:'view_phone', amountSpent:1, targetUserId:ad.user }),
             CreditTransaction.create({
                 userId:chargedUser._id, type:'REVEAL', amount:-1,
-                balanceBefore, balanceAfter:chargedUser.activePackage.creditsRemaining,
+                balanceBefore, balanceAfter:chargedUser.connectsBalance,
                 source:'PHONE_REVEAL', targetUserId:ad.user, postId:ad._id,
                 packageId:chargedUser.activePackage?.packageId, phoneRevealId:claimedReveal._id,
                 reason:'Phone number revealed'
             }),
             User.updateOne({ _id:ad.user }, { $inc:{ numberShowupCount:1 } })
         ]);
-        res.json({ success:true, phone:ad.phone, balance:chargedUser.activePackage.creditsRemaining, revealId:claimedReveal._id });
+        res.json({ success:true, phone:ad.phone, balance:chargedUser.connectsBalance, revealId:claimedReveal._id });
     } catch (err) { res.status(500).json({ success:false, message:err.message }); }
 };
 
@@ -189,11 +203,7 @@ exports.unlockPost = async (req, res) => {
             return res.status(409).json({ success:false, message:'Connection is already being processed. Please try again.' });
         }
 
-        const chargedUser = await User.findOneAndUpdate(
-            activePackageFilter(userId, ['You','Both']),
-            { $inc:{ 'activePackage.creditsRemaining':-1, 'activePackage.usedCredits':1, connectsBalance:-1, creditsUsed:1 } },
-            { new:true }
-        );
+        const chargedUser = await chargeOneConnect(userId);
 
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
@@ -229,7 +239,7 @@ exports.unlockPost = async (req, res) => {
             })
         ]);
 
-        res.json({ success:true, unlocked:true, balance:chargedUser.activePackage.creditsRemaining, revealId:claimed._id });
+        res.json({ success:true, unlocked:true, balance:chargedUser.connectsBalance, revealId:claimed._id });
     } catch (err) {
         console.error('unlockPost error:', err);
         res.status(500).json({ success:false, message:err.message });
