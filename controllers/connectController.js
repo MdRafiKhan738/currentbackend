@@ -104,8 +104,9 @@ exports.revealPhone = async (req, res) => {
     try {
         const { adId } = req.body;
         const Ad = require('../models/Ad');
-        const ad = await Ad.findById(adId).select('phone user hidePhone');
+        const ad = await Ad.findById(adId).select('phone user hidePhone status');
         if (!ad) return res.status(404).json({ success:false, message:'Post not found' });
+        if (ad.status !== 'active') return res.status(409).json({ success:false, message:'This post is not approved yet.' });
         if (!ad.phone) return res.status(404).json({ success:false, message:'This post has no phone number.' });
         const viewerId = String(req.user.id);
         const ownerId = String(ad.user);
@@ -244,6 +245,7 @@ exports.unlockPost = async (req, res) => {
         const Ad = require('../models/Ad');
         const ad = await Ad.findById(adId).select('user phone status');
         if (!ad) return res.status(404).json({ success:false, message:'Post not found.' });
+        if (ad.status !== 'active') return res.status(409).json({ success:false, message:'This post is not approved yet.' });
         if (String(ad.user) === userId) return res.json({ success:true, unlocked:true, ownPost:true });
 
         const existing = await PhoneReveal.findOne({
