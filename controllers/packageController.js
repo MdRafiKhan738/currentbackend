@@ -87,17 +87,31 @@ exports.manualInject = async (req, res) => {
         user.connectsBalance = balanceBefore + creditAmount;
         user.creditsPurchased = Number(user.creditsPurchased || 0) + creditAmount;
 
-        // Extend validity Date
-        if (validDays) {
-            const currentValidity = user.validityDate && user.validityDate > new Date() ? user.validityDate : new Date();
-            user.validityDate = new Date(currentValidity.getTime() + Number(validDays) * 24 * 60 * 60 * 1000);
+        const selectedPackage = packageId ? await Package.findById(packageId) : null;
+        const effectiveValidDays = Number(validDays || selectedPackage?.validDays || 30);
+        if (!Number.isFinite(effectiveValidDays) || effectiveValidDays <= 0) {
+            return res.status(400).json({ success: false, message: "Validity days must be greater than zero." });
         }
 
-        const selectedPackage = packageId ? await Package.findById(packageId) : null;
+        // Extend validity from the current active validity when it is still live.
+        // Otherwise start a fresh validity period from now.
+        const now = new Date();
+        const currentValidity =
+            user.validityDate && new Date(user.validityDate) > now
+                ? new Date(user.validityDate)
+                : user.activePackage?.validTill && new Date(user.activePackage.validTill) > now
+                    ? new Date(user.activePackage.validTill)
+                    : now;
+        user.validityDate = new Date(
+            currentValidity.getTime() + effectiveValidDays * 24 * 60 * 60 * 1000
+        );
+
+        const selectedPackageType = selectedPackage?.packageType === "Both" ? "Both" : "You";
+        const selectedPackageName = selectedPackage?.name || packageName || "Manual package";
         user.activePackage = {
             packageId: packageId || undefined,
-            name: packageName || selectedPackage?.name || 'Manual package',
-            type: packageType === 'Both' || selectedPackage?.packageType === 'Both' ? 'Both' : 'You',
+            name: selectedPackageName,
+            type: packageType === 'Both' || selectedPackageType === 'Both' ? 'Both' : 'You',
             creditsRemaining: Number(connects) || Number(selectedPackage?.maxProfileView || selectedPackage?.total_connects) || 0,
             totalCredits: Number(connects) || Number(selectedPackage?.maxProfileView || selectedPackage?.total_connects) || 0,
             usedCredits: 0,
@@ -146,12 +160,16 @@ exports.manualInject = async (req, res) => {
             amount: 0, // Manual injection is usually free/admin action
             payType: 'Admin',
             payeeName: note || 'Manual Injection',
-            item: `${packageName || selectedPackage?.name || 'Manual Package'} - ${connects} Connects Added`,
+            item: `${selectedPackageName} (${user.activePackage.type}) - ${connects} Connects Added`,
             status: 'VALID'
         });
         await trx.save();
 
-        res.status(200).json({ success: true, data: user });
+        res.status(200).json({
+            success: true,
+            message: selectedPackageName + " package activated with " + creditAmount + " connects for " + effectiveValidDays + " days.",
+            data: user
+        });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
