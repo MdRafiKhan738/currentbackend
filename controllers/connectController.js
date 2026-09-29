@@ -20,15 +20,10 @@ const isActivePackage = (user) => {
 };
 
 const chargeOneConnect = async (userId) => {
+    // Wallet credits are authoritative. A positive wallet balance is usable
+    // even when the account has no package or the package has expired.
     const user = await User.findOneAndUpdate(
-        {
-            _id: userId,
-            connectsBalance: { $gt: 0 },
-            $or: [
-                { "activePackage.validTill": { $exists: false } },
-                { "activePackage.validTill": { $gt: new Date() } }
-            ]
-        },
+        { _id: userId, connectsBalance: { $gt: 0 } },
         { $inc: { connectsBalance: -1, creditsUsed: 1 } },
         { new: true }
     );
@@ -65,6 +60,23 @@ const getConnectionPayer = async (viewerId, ownerId) => {
     }
 
     return { user: viewer, payerType: "viewer" };
+};
+
+// For a valid Both package, the post owner controls access for every visitor.
+// If owner credits remain, one is consumed. If the wallet reaches zero, the
+// Both package still authorizes the connection until its validTill date.
+const consumeConnectionForPayer = async (payer) => {
+    if (!payer?.user) return { user: null, charged: false };
+    if (Number(payer.user.connectsBalance || 0) > 0) {
+        const charged = await chargeOneConnect(payer.user._id);
+        if (charged) return { user: charged, charged: true };
+    }
+
+    if (payer.payerType === "owner" && isActivePackage(payer.user) && payer.user.activePackage?.type === "Both") {
+        return { user: payer.user, charged: false };
+    }
+
+    return { user: null, charged: false };
 };
 
 exports.deductConnect = async (req, res) => {
@@ -125,13 +137,14 @@ exports.revealPhone = async (req, res) => {
         }
 
         const payer = await getConnectionPayer(viewerId, ownerId);
-        const chargedUser = payer.user ? await chargeOneConnect(payer.user._id) : null;
+        const chargeResult = await consumeConnectionForPayer(payer);
+        const chargedUser = chargeResult.user;
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
             return res.status(403).json({ success:false, code:'PACKAGE_REQUIRED', message:'Purchase an active package to view this number.' });
         }
 
-        const balanceBefore = Number(chargedUser.connectsBalance) + 1;
+        const balanceBefore = chargeResult.charged ? Number(chargedUser.connectsBalance) + 1 : Number(chargedUser.connectsBalance);
         claimedReveal.chargedUserId = chargedUser._id;
         claimedReveal.packageId = chargedUser.activePackage?.packageId;
         claimedReveal.status = 'OPEN';
@@ -147,19 +160,24 @@ exports.revealPhone = async (req, res) => {
             });
         }
 
-        await Promise.all([
-            ConnectLog.create({ userId:chargedUser._id, actionType:'view_phone', amountSpent:1, targetUserId:ad.user }),
-            CreditTransaction.create({
-                userId:chargedUser._id, type:'REVEAL', amount:-1,
-                balanceBefore, balanceAfter:chargedUser.connectsBalance,
-                source:'PHONE_REVEAL', targetUserId:ad.user, postId:ad._id,
-                packageId:chargedUser.activePackage?.packageId, phoneRevealId:claimedReveal._id,
-                reason:payer.payerType === 'owner'
-                    ? 'Phone number revealed - charged to post owner Both package'
-                    : 'Phone number revealed'
-            }),
+        const phoneAudit = [
             User.updateOne({ _id:ad.user }, { $inc:{ numberShowupCount:1 } })
-        ]);
+        ];
+        if (chargeResult.charged) {
+            phoneAudit.push(
+                ConnectLog.create({ userId:chargedUser._id, actionType:'view_phone', amountSpent:1, targetUserId:ad.user }),
+                CreditTransaction.create({
+                    userId:chargedUser._id, type:'REVEAL', amount:-1,
+                    balanceBefore, balanceAfter:chargedUser.connectsBalance,
+                    source:'PHONE_REVEAL', targetUserId:ad.user, postId:ad._id,
+                    packageId:chargedUser.activePackage?.packageId, phoneRevealId:claimedReveal._id,
+                    reason:payer.payerType === 'owner'
+                        ? 'Phone number revealed - charged to post owner Both package'
+                        : 'Phone number revealed'
+                })
+            );
+        }
+        await Promise.all(phoneAudit);
         res.json({ success:true, phone:ad.phone, balance:chargedUser.connectsBalance, revealId:claimedReveal._id });
     } catch (err) { res.status(500).json({ success:false, message:err.message }); }
 };
@@ -254,7 +272,8 @@ exports.unlockPost = async (req, res) => {
         }
 
         const payer = await getConnectionPayer(userId, ad.user);
-        const chargedUser = payer.user ? await chargeOneConnect(payer.user._id) : null;
+        const chargeResult = await consumeConnectionForPayer(payer);
+        const chargedUser = chargeResult.user;
 
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
@@ -266,8 +285,12 @@ exports.unlockPost = async (req, res) => {
         }
 
         const balanceBefore = Number(chargedUser.connectsBalance) + 1;
-        claimed.chargedUserId = chargedUser._id;
-        claimed.packageId = chargedUser.activePackage?.packageId;
+        if (chargeResult.charged) {
+            claimed.chargedUserId = chargedUser._id;
+            claimed.packageId = chargedUser.activePackage?.packageId;
+        } else if (payer.payerType === "owner") {
+            claimed.packageId = chargedUser.activePackage?.packageId;
+        }
         claimed.connectMethod = actionType;
         claimed.status = 'OPEN';
         claimed.openedAt = new Date();
@@ -282,24 +305,26 @@ exports.unlockPost = async (req, res) => {
             });
         }
 
-        await Promise.all([
-            ConnectLog.create({ userId:chargedUser._id, actionType, amountSpent:1, targetUserId:ad.user }),
-            CreditTransaction.create({
-                userId:chargedUser._id,
-                type:'REVEAL',
-                amount:-1,
-                balanceBefore,
-                balanceAfter:chargedUser.connectsBalance,
-                source:'POST_CONNECTION',
-                targetUserId:ad.user,
-                postId:ad._id,
-                packageId:chargedUser.activePackage?.packageId,
-                phoneRevealId:claimed._id,
-                reason:payer.payerType === 'owner'
-                    ? 'First connection unlocked for post - charged to post owner Both package'
-                    : 'First connection unlocked for post'
-            })
-        ]);
+        if (chargeResult.charged) {
+            await Promise.all([
+                ConnectLog.create({ userId:chargedUser._id, actionType, amountSpent:1, targetUserId:ad.user }),
+                CreditTransaction.create({
+                    userId:chargedUser._id,
+                    type:'REVEAL',
+                    amount:-1,
+                    balanceBefore,
+                    balanceAfter:chargedUser.connectsBalance,
+                    source:'POST_CONNECTION',
+                    targetUserId:ad.user,
+                    postId:ad._id,
+                    packageId:chargedUser.activePackage?.packageId,
+                    phoneRevealId:claimed._id,
+                    reason:payer.payerType === 'owner'
+                        ? 'First connection unlocked for post - charged to post owner Both package'
+                        : 'First connection unlocked for post'
+                })
+            ]);
+        }
 
         res.json({ success:true, unlocked:true, balance:chargedUser.connectsBalance, revealId:claimed._id });
     } catch (err) {
