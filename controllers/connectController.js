@@ -7,19 +7,34 @@ const CreditTransaction = require('../models/CreditTransaction');
 // An active package is not required when the account already has connectsBalance.
 const activePackageFilter = (userId, types) => ({
     _id: userId,
-    connectsBalance: { $gt: 0 }
+    connectsBalance: { $gt: 0 },
+    $or: [
+        { "activePackage.validTill": { $exists: false } },
+        { "activePackage.validTill": { $gt: new Date() } }
+    ]
 });
+
+const isActivePackage = (user) => {
+    const validTill = user?.activePackage?.validTill;
+    return !validTill || new Date(validTill).getTime() > Date.now();
+};
 
 const chargeOneConnect = async (userId) => {
     const user = await User.findOneAndUpdate(
-        { _id: userId, connectsBalance: { $gt: 0 } },
+        {
+            _id: userId,
+            connectsBalance: { $gt: 0 },
+            $or: [
+                { "activePackage.validTill": { $exists: false } },
+                { "activePackage.validTill": { $gt: new Date() } }
+            ]
+        },
         { $inc: { connectsBalance: -1, creditsUsed: 1 } },
         { new: true }
     );
 
     if (!user) return null;
 
-    // Keep package counters synchronized when this balance belongs to an active package.
     if (Number(user.activePackage?.creditsRemaining || 0) > 0) {
         user.activePackage.creditsRemaining = Math.max(0, Number(user.activePackage.creditsRemaining) - 1);
         user.activePackage.usedCredits = Number(user.activePackage.usedCredits || 0) + 1;
@@ -27,6 +42,28 @@ const chargeOneConnect = async (userId) => {
     }
 
     return user;
+};
+
+const getConnectionPayer = async (viewerId, ownerId) => {
+    const [viewer, owner] = await Promise.all([
+        User.findById(viewerId),
+        User.findById(ownerId)
+    ]);
+
+    if (!viewer || !owner) return { user: null, payerType: null };
+
+    // A Both package pays for people connecting to the owner's approved posts.
+    // This means the visitor does not need a credit when the post owner has
+    // an active Both package with available credit.
+    if (
+        owner._id.toString() !== viewer._id.toString() &&
+        owner.activePackage?.type === "Both" &&
+        isActivePackage(owner)
+    ) {
+        return { user: owner, payerType: "owner" };
+    }
+
+    return { user: viewer, payerType: "viewer" };
 };
 
 exports.deductConnect = async (req, res) => {
@@ -86,7 +123,8 @@ exports.revealPhone = async (req, res) => {
             return res.status(409).json({ success:false, code:'REVEAL_IN_PROGRESS', message:'Your number reveal is already being processed. Please try again.' });
         }
 
-        let chargedUser = await chargeOneConnect(viewerId);
+        const payer = await getConnectionPayer(viewerId, ownerId);
+        const chargedUser = payer.user ? await chargeOneConnect(payer.user._id) : null;
         if (!chargedUser) {
             await PhoneReveal.deleteOne({ _id:reveal._id, status:'PENDING' });
             return res.status(403).json({ success:false, code:'PACKAGE_REQUIRED', message:'Purchase an active package to view this number.' });
@@ -115,7 +153,9 @@ exports.revealPhone = async (req, res) => {
                 balanceBefore, balanceAfter:chargedUser.connectsBalance,
                 source:'PHONE_REVEAL', targetUserId:ad.user, postId:ad._id,
                 packageId:chargedUser.activePackage?.packageId, phoneRevealId:claimedReveal._id,
-                reason:'Phone number revealed'
+                reason:payer.payerType === 'owner'
+                    ? 'Phone number revealed - charged to post owner Both package'
+                    : 'Phone number revealed'
             }),
             User.updateOne({ _id:ad.user }, { $inc:{ numberShowupCount:1 } })
         ]);
@@ -253,7 +293,9 @@ exports.unlockPost = async (req, res) => {
                 postId:ad._id,
                 packageId:chargedUser.activePackage?.packageId,
                 phoneRevealId:claimed._id,
-                reason:'First connection unlocked for post'
+                reason:payer.payerType === 'owner'
+                    ? 'First connection unlocked for post - charged to post owner Both package'
+                    : 'First connection unlocked for post'
             })
         ]);
 
