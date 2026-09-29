@@ -369,7 +369,15 @@ exports.getPhoneViewHistory = async (req, res) => {
 
 exports.setConnectBalance = async (req, res) => {
     try {
-        const { userId, targetConnects, reason } = req.body;
+        const {
+            userId,
+            targetConnects,
+            reason,
+            packageId,
+            packageType,
+            packageName,
+            validDays
+        } = req.body;
         const target = Number(targetConnects);
 
         if (!userId) {
@@ -384,14 +392,52 @@ exports.setConnectBalance = async (req, res) => {
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
+        const selectedPackage = packageId ? await Package.findById(packageId) : null;
+        if (packageId && !selectedPackage) {
+            return res.status(404).json({ success: false, message: 'Selected package not found.' });
+        }
+
         const balanceBefore = Number(user.connectsBalance || 0);
         const difference = target - balanceBefore;
-
         user.connectsBalance = target;
 
-        // Keep the active package's remaining credit in sync with the manually
-        // corrected connect balance. Used credits are preserved.
-        if (user.activePackage) {
+        const previousPackage = user.activePackage?.toObject
+            ? user.activePackage.toObject()
+            : (user.activePackage || null);
+
+        if (selectedPackage) {
+            const previousValidTill = previousPackage?.validTill ? new Date(previousPackage.validTill) : null;
+            const samePackage = String(previousPackage?.packageId || '') === String(selectedPackage._id);
+            const requestedDays = Number(validDays);
+            const packageDays = Number(selectedPackage.validDays || 30);
+            const effectiveDays = Number.isFinite(requestedDays) && requestedDays > 0
+                ? requestedDays
+                : (Number.isFinite(packageDays) && packageDays > 0 ? packageDays : 30);
+            const validTill = samePackage && previousValidTill && previousValidTill > new Date()
+                ? previousValidTill
+                : new Date(Date.now() + effectiveDays * 86400000);
+            const usedCredits = samePackage ? Number(previousPackage?.usedCredits || 0) : 0;
+            const packageTypeResolved = selectedPackage.packageType === 'Both'
+                ? 'Both'
+                : (selectedPackage.packageType === 'You' ? 'You' : (packageType === 'Both' ? 'Both' : 'You'));
+
+            user.activePackage = {
+                packageId: selectedPackage._id,
+                name: selectedPackage.name || packageName || 'Package',
+                type: packageTypeResolved,
+                creditsRemaining: target,
+                totalCredits: target + usedCredits,
+                usedCredits,
+                activatedAt: samePackage && previousPackage?.activatedAt ? previousPackage.activatedAt : new Date(),
+                paymentMethod: 'Manual admin assignment',
+                returnCreditOnClose: Array.isArray(selectedPackage.checkedFeatures)
+                    && selectedPackage.checkedFeatures.some((feature) =>
+                        String(feature).trim().toLowerCase() === 'close number return credit'
+                    ),
+                validTill
+            };
+            user.validityDate = validTill;
+        } else if (user.activePackage) {
             const usedCredits = Number(user.activePackage.usedCredits || 0);
             user.activePackage.creditsRemaining = target;
             user.activePackage.totalCredits = target + usedCredits;
@@ -402,14 +448,14 @@ exports.setConnectBalance = async (req, res) => {
         if (difference !== 0) {
             await CreditTransaction.create({
                 userId: user._id,
-                type: difference > 0 ? 'ADMIN_ADJUSTMENT' : 'ADMIN_ADJUSTMENT',
+                type: 'ADMIN_ADJUSTMENT',
                 amount: difference,
                 balanceBefore,
                 balanceAfter: target,
-                source: 'ADMIN_CONNECT_BALANCE_CORRECTION',
-                packageId: user.activePackage?.packageId,
+                source: selectedPackage ? 'ADMIN_PACKAGE_SELECTION' : 'ADMIN_CONNECT_BALANCE_CORRECTION',
+                packageId: selectedPackage?._id || user.activePackage?.packageId,
                 adminId: req.admin.id,
-                reason: reason?.trim() || 'Manual current connect balance correction'
+                reason: reason?.trim() || (selectedPackage ? 'Package selected and current connect balance saved' : 'Manual current connect balance correction')
             });
         }
 
@@ -420,7 +466,9 @@ exports.setConnectBalance = async (req, res) => {
             amount: 0,
             payType: 'Admin',
             payeeName: reason?.trim() || 'Connect Balance Correction',
-            item: `Current Connect set from ${balanceBefore} to ${target}`,
+            item: selectedPackage
+                ? `${selectedPackage.name} (${user.activePackage?.type}) - Current Connect set to ${target}`
+                : `Current Connect set from ${balanceBefore} to ${target}`,
             status: 'VALID'
         });
 
@@ -440,7 +488,9 @@ exports.setConnectBalance = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: `Connect balance updated to ${target}.`,
+            message: selectedPackage
+                ? `${selectedPackage.name} (${user.activePackage?.type}) is now active with ${target} connects.`
+                : `Connect balance updated to ${target}.`,
             data: user
         });
     } catch (err) {
