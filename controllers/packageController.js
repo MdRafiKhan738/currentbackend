@@ -123,13 +123,17 @@ exports.manualInject = async (req, res) => {
                 ? requestedDays
                 : (Number.isFinite(defaultPackageDays) && defaultPackageDays > 0 ? defaultPackageDays : 30);
 
-        // Package validity is independent from wallet credits. A manual
-        // credit injection can add 200,000+ credits while the same active
-        // package remains Platinum / Both.
+        // Package validity is independent from wallet credits. Adding more
+        // credits to the same active package must not silently reset its exact
+        // expiry. Use "Update Valid To" when the admin actually wants to change
+        // the date.
+        const sameActivePackage =
+            Boolean(previousPackage?.name) &&
+            (!selectedPackage ||
+                String(previousPackage?.packageId || "") === String(selectedPackage._id));
+
         let expiry;
-        if (validDays !== undefined && validDays !== "" && Number.isFinite(requestedDays) && requestedDays > 0) {
-            expiry = new Date(Date.now() + requestedDays * 86400000);
-        } else if (previousPackage?.validTill && new Date(previousPackage.validTill) > new Date()) {
+        if (sameActivePackage && previousPackage?.validTill && new Date(previousPackage.validTill) > new Date()) {
             expiry = new Date(previousPackage.validTill);
         } else {
             expiry = new Date(Date.now() + effectiveValidDays * 86400000);
