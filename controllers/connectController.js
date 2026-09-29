@@ -53,8 +53,7 @@ const getConnectionPayer = async (viewerId, ownerId) => {
     if (
         owner._id.toString() !== viewer._id.toString() &&
         owner.activePackage?.type === "Both" &&
-        isActivePackage(owner) &&
-        Number(owner.connectsBalance || 0) > 0
+        isActivePackage(owner)
     ) {
         return { user: owner, payerType: "owner" };
     }
@@ -145,8 +144,12 @@ exports.revealPhone = async (req, res) => {
         }
 
         const balanceBefore = chargeResult.charged ? Number(chargedUser.connectsBalance) + 1 : Number(chargedUser.connectsBalance);
-        claimedReveal.chargedUserId = chargedUser._id;
-        claimedReveal.packageId = chargedUser.activePackage?.packageId;
+        if (chargeResult.charged) {
+            claimedReveal.chargedUserId = chargedUser._id;
+            claimedReveal.packageId = chargedUser.activePackage?.packageId;
+        } else if (payer.payerType === 'owner') {
+            claimedReveal.packageId = chargedUser.activePackage?.packageId;
+        }
         claimedReveal.status = 'OPEN';
         claimedReveal.openedAt = new Date();
         await claimedReveal.save();
