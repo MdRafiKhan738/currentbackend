@@ -320,11 +320,25 @@ exports.unlockPost = async (req, res) => {
             { new:true }
         );
         if (!claimed) {
-            const completed = await PhoneReveal.findById(reveal._id);
-            if (completed?.status === 'OPEN') {
-                return res.json({ success:true, unlocked:true, alreadyUnlocked:true, revealId:completed._id });
+            // A phone reveal/chat/CV request can arrive at the same time.
+            // Wait for the first connection transaction to finish instead
+            // of returning a transient "already being processed" error.
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+                const completed = await PhoneReveal.findById(reveal._id).select("status _id");
+                if (completed?.status === "OPEN") {
+                    return res.json({
+                        success:true,
+                        unlocked:true,
+                        alreadyUnlocked:true,
+                        revealId:completed._id
+                    });
+                }
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
-            return res.status(409).json({ success:false, message:'Connection is already being processed. Please try again.' });
+            return res.status(409).json({
+                success:false,
+                message:"Connection is already being processed. Please try again."
+            });
         }
 
         const payer = await getConnectionPayer(userId, ad.user);
