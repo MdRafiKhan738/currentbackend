@@ -19,22 +19,40 @@ const isActivePackage = (user) => {
     return !validTill || new Date(validTill).getTime() > Date.now();
 };
 
-const chargeOneConnect = async (userId) => {
-    // Wallet credits are authoritative. A positive wallet balance is usable
-    // even when the account has no package or the package has expired.
-    const user = await User.findOneAndUpdate(
-        { _id: userId, connectsBalance: { $gt: 0 } },
-        { $inc: { connectsBalance: -1, creditsUsed: 1 } },
-        { new: true }
-    );
+// Some older package records have the package credit count in
+// activePackage.creditsRemaining while connectsBalance is zero. Treat the
+// larger available balance as the authoritative spendable connect count.
+const getAvailableConnects = (user) => {
+    if (!user) return 0;
+    const wallet = Number(user.connectsBalance || 0);
+    const packageRemaining = isActivePackage(user)
+        ? Number(user.activePackage?.creditsRemaining || 0)
+        : 0;
+    return Math.max(wallet, packageRemaining);
+};
 
+const chargeOneConnect = async (userId) => {
+    let user = await User.findById(userId);
     if (!user) return null;
 
-    if (Number(user.activePackage?.creditsRemaining || 0) > 0) {
-        user.activePackage.creditsRemaining = Math.max(0, Number(user.activePackage.creditsRemaining) - 1);
-        user.activePackage.usedCredits = Number(user.activePackage.usedCredits || 0) + 1;
-        await user.save();
+    const wallet = Number(user.connectsBalance || 0);
+    const packageRemaining = isActivePackage(user)
+        ? Number(user.activePackage?.creditsRemaining || 0)
+        : 0;
+
+    if (wallet <= 0 && packageRemaining <= 0) return null;
+
+    if (wallet > 0) {
+        user.connectsBalance = wallet - 1;
     }
+
+    if (packageRemaining > 0) {
+        user.activePackage.creditsRemaining = Math.max(0, packageRemaining - 1);
+        user.activePackage.usedCredits = Number(user.activePackage.usedCredits || 0) + 1;
+    }
+
+    user.creditsUsed = Number(user.creditsUsed || 0) + 1;
+    await user.save();
 
     return user;
 };
@@ -66,7 +84,7 @@ const getConnectionPayer = async (viewerId, ownerId) => {
 // Both package still authorizes the connection until its validTill date.
 const consumeConnectionForPayer = async (payer) => {
     if (!payer?.user) return { user: null, charged: false };
-    if (Number(payer.user.connectsBalance || 0) > 0) {
+    if (getAvailableConnects(payer.user) > 0) {
         const charged = await chargeOneConnect(payer.user._id);
         if (charged) return { user: charged, charged: true };
     }
