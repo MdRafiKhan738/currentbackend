@@ -203,7 +203,8 @@ exports.revealPhone = async (req, res) => {
         if (socketio && chargeResult.charged) {
             const payload = {
                 userId: String(chargedUser._id),
-                balance: chargedUser.connectsBalance,
+                balance: getAvailableConnects(chargedUser),
+                connectsBalance: getAvailableConnects(chargedUser),
                 creditsUsed: chargedUser.creditsUsed,
                 activePackage: chargedUser.activePackage
             };
@@ -248,7 +249,7 @@ exports.revealPhone = async (req, res) => {
         res.json({
             success:true,
             phone:ad.phone,
-            balance:chargedUser.connectsBalance,
+            balance:getAvailableConnects(chargedUser),
             revealId:claimedReveal._id,
             payerType: payer.payerType
         });
@@ -388,7 +389,8 @@ exports.unlockPost = async (req, res) => {
         if (socketio) {
             socketio.to(String(chargedUser._id)).emit('credit balance updated', {
                 userId: String(chargedUser._id),
-                balance: chargedUser.connectsBalance,
+                balance: getAvailableConnects(chargedUser),
+                connectsBalance: getAvailableConnects(chargedUser),
                 creditsUsed: chargedUser.creditsUsed
             });
         }
@@ -414,7 +416,7 @@ exports.unlockPost = async (req, res) => {
             ]);
         }
 
-        res.json({ success:true, unlocked:true, balance:chargedUser.connectsBalance, revealId:claimed._id });
+        res.json({ success:true, unlocked:true, balance:getAvailableConnects(chargedUser), revealId:claimed._id });
     } catch (err) {
         console.error('unlockPost error:', err);
         res.status(500).json({ success:false, message:err.message });
