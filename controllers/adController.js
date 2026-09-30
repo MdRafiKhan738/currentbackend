@@ -23,6 +23,15 @@ const emitRealtime = (req, event, payload) => {
 };
 
 const getFilterQueryValue = (query, longKey, shortKey) => query[longKey] || query[shortKey];
+const normalizeMarketplacePost = (ad) => {
+    const item = typeof ad.toObject === "function" ? ad.toObject() : { ...ad };
+    if (item.postRole === "investor" || item.postRole === "business_owner") {
+        const label = item.postRole === "investor" ? "Investor" : "Business Owner";
+        item.category = item.category || label;
+        item.subCategory = item.subCategory || label;
+    }
+    return item;
+};
 
 // Returns 1 (00:00-07:59), 2 (08:00-15:59), or 3 (16:00-23:59)
 const getCurrentTimeSlot = () => {
@@ -979,8 +988,8 @@ exports.getFeedAdsPublic = async (req, res) => {
                 },
                 {
                     $or: [
-                        { adType: 'Promoted', promoteEndDate: { $gte: now } },
-                        { adType: 'Processing' },
+                        { postRole: { $in: ['investor', 'business_owner'] } },
+                        { showTill: { $exists: false } },
                         { showTill: { $gte: now } }
                     ]
                 }
@@ -988,9 +997,9 @@ exports.getFeedAdsPublic = async (req, res) => {
         };
 
         const selectFieldsPromoted =
-            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD postRole businessStatus minInvestment maxInvestment expectedReturn investmentReturnType';
+            'headline description features priceBoxValues priceBoxFields labels views price minInvestment maxInvestment expectedProfit expectedReturn postRole businessStatus images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount slotDeliveryCount currentSlot promoteStartDate promoteEndDate promoteType trafficLink trafficButtonType promoteTag targetD investmentReturnType';
         const selectFieldsFree =
-            'headline description features labels views price images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate postRole businessStatus minInvestment maxInvestment expectedReturn';
+            'headline description features priceBoxValues priceBoxFields labels views price minInvestment maxInvestment expectedProfit expectedReturn postRole businessStatus images location subLocation category subCategory createdAt deliveryCount user adType phone hidePhone additionalPhones promotedViews promotedDeliveryCount dailyViewsCount dailyDeliveryCount promoteStartDate promoteEndDate';
         const populateUserFields =
             'name storeName photo photoStatus storeLogo storeBanner merchantType createdAt verifiedBy mVerified sellerPageUrl followers rating ratingCount';
 
@@ -1133,7 +1142,7 @@ exports.getFeedAdsPublic = async (req, res) => {
         const feedPriceConfig = new Map(feedSubCategoryDocs.map(doc => [doc.name, doc]));
 
         const optimizedAds = allAds.map(ad => {
-            const adObj = ad.toObject();
+            const adObj = normalizeMarketplacePost(ad);
             const feedConfig = feedPriceConfig.get(adObj.subCategory);
             if (feedConfig) {
                 adObj.priceBoxShow = Boolean(feedConfig.priceBoxShow);
