@@ -131,9 +131,27 @@ exports.revealPhone = async (req, res) => {
             { new:true }
         );
         if (!claimedReveal) {
-            const completed = await PhoneReveal.findById(reveal._id);
-            if (completed?.status === 'OPEN') return res.json({ success:true, phone:ad.phone, balance:null, revealId:completed._id, alreadyRevealed:true });
-            return res.status(409).json({ success:false, code:'REVEAL_IN_PROGRESS', message:'Your number reveal is already being processed. Please try again.' });
+            // Another request is already charging/opening this exact reveal.
+            // Wait briefly for that request to finish instead of surfacing a
+            // concurrent-request error to the viewer.
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+                const completed = await PhoneReveal.findById(reveal._id).select("status _id");
+                if (completed?.status === "OPEN") {
+                    return res.json({
+                        success:true,
+                        phone:ad.phone,
+                        balance:null,
+                        revealId:completed._id,
+                        alreadyRevealed:true
+                    });
+                }
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            return res.status(409).json({
+                success:false,
+                code:"REVEAL_IN_PROGRESS",
+                message:"Your number reveal is already being processed. Please try again."
+            });
         }
 
         // Both-package accounts own the connection cost for their approved
